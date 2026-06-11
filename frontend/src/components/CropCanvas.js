@@ -4,14 +4,17 @@ import scannerApi from '../services/scannerApi';
 import './CropCanvas.css';
 
 function CropCanvas() {
+  const store = useScanStore();
+  
+  // 1. Fallback Assignment Guard: Ensure manualBoxes is NEVER undefined
+  const manualBoxes = store.manualBoxes || [];
   const {
     fullRawScan,
-    manualBoxes,
     setManualBoxes,
     currentClickStart,
     setCurrentClickStart,
     addPhotos,
-  } = useScanStore();
+  } = store;
 
   const canvasRef = useRef(null);
   const [canvasImage, setCanvasImage] = useState(null);
@@ -42,7 +45,7 @@ function CropCanvas() {
   }, [fullRawScan]);
 
   // Redraw canvas with boxes
-  const redrawCanvas = useCallback((img, boxes, scaling) => {
+  const redrawCanvas = useCallback((img, boxes = [], scaling) => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -50,8 +53,10 @@ function CropCanvas() {
     // Clear and redraw image
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // Draw finalized boxes
-    boxes.forEach((box) => {
+    // 2. Structural loop safety guard
+    const activeBoxes = boxes || [];
+    activeBoxes.forEach((box) => {
+      if (!box || !box[0] || !box[1]) return; // Skip malformed inputs
       ctx.strokeStyle = '#ff6b35';
       ctx.lineWidth = 3;
       ctx.strokeRect(
@@ -77,6 +82,13 @@ function CropCanvas() {
     }
   }, [currentClickStart]);
 
+  // Force canvas layout synchronization on state alterations
+  useEffect(() => {
+    if (canvasImage) {
+      redrawCanvas(canvasImage, manualBoxes, scaling);
+    }
+  }, [manualBoxes, canvasImage, scaling, redrawCanvas]);
+
   const handleCanvasClick = (event) => {
     if (!canvasRef.current || !canvasImage) return;
 
@@ -85,11 +97,12 @@ function CropCanvas() {
     const x = Math.round((event.clientX - rect.left) / scaling);
     const y = Math.round((event.clientY - rect.top) / scaling);
 
-    if (currentClickStart === null) {
-      // Set top-left corner
+    // ✅ Defensive array check: strictly verify if we have an iterable [x, y] array
+    if (!Array.isArray(currentClickStart) || currentClickStart.length < 2) {
+      // Set top-left corner natively as a real array
       setCurrentClickStart([x, y]);
     } else {
-      // Set bottom-right corner and create crop
+      // Safely destructure now that we're 100% sure it's a valid array
       const [x1, y1] = currentClickStart;
       const [x2, y2] = [x, y];
 
@@ -99,10 +112,14 @@ function CropCanvas() {
       const realY1 = Math.min(y1, y2);
       const realY2 = Math.max(y1, y2);
 
+      // Validate that the crop box has meaningful dimensions
       if (realX2 - realX1 > 15 && realY2 - realY1 > 15) {
         setLoading(true);
         cropImage(realX1, realY1, realX2, realY2);
         setCurrentClickStart(null);
+      } else {
+        // Optional: If they clicked too close, reset it or treat it as a new first-click
+        setCurrentClickStart([x, y]);
       }
     }
   };
@@ -120,13 +137,8 @@ function CropCanvas() {
         }));
         addPhotos(newPhotos);
 
-        // Add box to manual boxes
+        // Safely spread your existing tracking elements
         setManualBoxes([...manualBoxes, [[x1, y1], [x2, y2]]]);
-        
-        // Redraw with new box
-        if (canvasImage) {
-          redrawCanvas(canvasImage, [...manualBoxes, [[x1, y1], [x2, y2]]], scaling);
-        }
       }
     } catch (err) {
       setError('Failed to crop image');
@@ -140,9 +152,6 @@ function CropCanvas() {
     if (manualBoxes.length > 0) {
       const newBoxes = manualBoxes.slice(0, -1);
       setManualBoxes(newBoxes);
-      if (canvasImage) {
-        redrawCanvas(canvasImage, newBoxes, scaling);
-      }
     }
   };
 
@@ -150,9 +159,6 @@ function CropCanvas() {
     if (window.confirm('Clear all crop boxes?')) {
       setManualBoxes([]);
       setCurrentClickStart(null);
-      if (canvasImage) {
-        redrawCanvas(canvasImage, [], scaling);
-      }
     }
   };
 
