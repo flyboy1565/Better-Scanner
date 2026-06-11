@@ -56,18 +56,33 @@ export const scannerApi = {
   },
 
   // Save photos to disk and optionally upload to Immich
-  savePhotos: async (photoIds, fileFormat = 'JPEG', customNames = null, uploadToImmich = true, defaultAlbumId = null, photoAlbumOverrides = null) => {
-    const response = await api.post('/api/save', {
-      photo_ids: photoIds,
-      file_format: fileFormat,
-      custom_names: customNames,
-      upload_to_immich: uploadToImmich,
-      default_album_id: defaultAlbumId,
-      photo_album_overrides: photoAlbumOverrides,
+  savePhotos: async (
+    photoIds, 
+    fileFormat, 
+    customNames = {}, 
+    uploadToImmich = false, 
+    defaultAlbumId = null, 
+    photoAlbumOverrides = {},
+    photoDescriptions = {} // ✨ Match parameter signature 
+  ) => {
+    const response = await fetch('http://localhost:8000/api/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        photo_ids: photoIds,
+        file_format: fileFormat,
+        upload_to_immich: uploadToImmich,
+        default_album_id: defaultAlbumId,
+        custom_names: customNames,
+        photo_descriptions: photoDescriptions, // ✨ Maps straight to our backend schema key!
+        photo_album_overrides: photoAlbumOverrides,
+      }),
     });
-    return response.data;
+    return response.json();
   },
-
+  
   // Check Immich server health
   checkImmichHealth: async () => {
     const response = await api.get('/api/immich/health');

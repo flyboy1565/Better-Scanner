@@ -1,7 +1,9 @@
 import requests
 import logging
 import mimetypes
+import hashlib
 from io import BytesIO
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from app.core.config import settings
@@ -34,7 +36,6 @@ class ImmichClient:
             return False
 
         try:
-            # Try /api/albums endpoint (known to work), fall back to other endpoints if needed
             logger.debug(f"Checking Immich health at {self.server_url}/api/albums")
             response = requests.get(f"{self.server_url}/api/albums", headers=self._get_headers(), timeout=10)
             if response.status_code == 200:
@@ -58,45 +59,73 @@ class ImmichClient:
         return mime_type or 'application/octet-stream'
 
     def _try_upload(self, file_obj, filename: str, album_id: Optional[str] = None, description: Optional[str] = None) -> tuple[bool, Optional[str]]:
+        file_obj.seek(0, os.SEEK_END)
+        file_size = file_obj.tell()
         file_obj.seek(0)
-        field_names = ["file", "file[]", "files", "files[]", "asset", "assets", "image", "image[]"]
-        upload_paths = ["/api/assets", "/api/asset"]
-        data = {}
+
+        # Generate deduplication parameters required by modern Immich APIs
+        device_id = "python-photo-scanner"
+        seed_string = f"{filename}-{file_size}".encode('utf-8')
+        device_asset_id = hashlib.md5(seed_string).hexdigest()
+        
+        # Format standardized UTC timestamps
+        current_iso_time = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        # Modern Immich expects form parameters alongside the binary file field
+        base_data = {
+            "deviceAssetId": device_asset_id,
+            "deviceId": device_id,
+            "fileCreatedAt": current_iso_time,
+            "fileModifiedAt": current_iso_time,
+            "isFavorite": "false"
+        }
         if description:
-            data["description"] = description
-            logger.debug(f"Adding description to upload: {description}")
+            base_data["description"] = description
+            logger.debug(f"Adding description to upload payload: {description}")
+
+        # Field permutations. 'assetData' is the correct key for modern v1.x instances
+        field_names = ["assetData", "file", "file[]", "files", "asset", "assets", "image"]
+        upload_paths = ["/api/assets", "/api/asset"]
 
         for upload_path in upload_paths:
             for field_name in field_names:
                 file_obj.seek(0)
-                logger.debug(f"Trying upload path {upload_path} with field name: {field_name}")
-                response = requests.post(
-                    f"{self.server_url}{upload_path}",
-                    files=[(field_name, (filename, file_obj, self._guess_mime_type(filename)))],
-                    data=data,
-                    headers=self._get_headers(),
-                    timeout=60,
-                )
+                logger.debug(f"Trying upload path {upload_path} with multipart key: {field_name}")
+                
+                try:
+                    response = requests.post(
+                        f"{self.server_url.rstrip('/')}{upload_path}",
+                        files=[(field_name, (filename, file_obj, self._guess_mime_type(filename)))],
+                        data=base_data,
+                        headers=self._get_headers(),
+                        timeout=60,
+                    )
 
-                logger.debug(f"Upload attempt {upload_path} field '{field_name}' returned {response.status_code}")
-                if response.status_code in [200, 201]:
-                    try:
-                        result = response.json()
-                        asset_id = result.get("id") or result.get("asset", {}).get("id")
-                        logger.info(f"Successfully uploaded image using {upload_path} field '{field_name}': {asset_id}")
-                        return True, asset_id
-                    except Exception as e:
-                        logger.warning(f"Could not parse asset ID from response: {e}")
-                        return True, None
+                    logger.debug(f"Upload attempt {upload_path} field '{field_name}' returned {response.status_code}")
+                    
+                    if response.status_code in [200, 201]:
+                        try:
+                            result = response.json()
+                            asset_id = result.get("id") or result.get("asset", {}).get("id")
+                            logger.info(f"Successfully uploaded image using {upload_path} field '{field_name}': {asset_id}")
+                            return True, asset_id
+                        except Exception as e:
+                            logger.warning(f"Could not parse asset ID from valid JSON response: {e}")
+                            return True, None
 
-                if response.status_code == 400 and "Unexpected field" in response.text:
-                    logger.warning(f"Field '{field_name}' not accepted by Immich at {upload_path}, trying next field")
+                    # If endpoint doesn't exist (404) or rejects field format (400), log warning and check next permutation
+                    if response.status_code in [400, 404]:
+                        logger.warning(f"Field '{field_name}' or path '{upload_path}' rejected by server (Status {response.status_code}). Advancing...")
+                        continue
+
+                    logger.error(f"Immich upload failed at {upload_path} with status: {response.status_code} - {response.text}")
+                    return False, None
+
+                except Exception as loop_err:
+                    logger.error(f"Network transport error inside upload block logic: {loop_err}")
                     continue
 
-                logger.error(f"Immich upload failed at {upload_path} with field '{field_name}': {response.status_code} - {response.text}")
-                return False, None
-
-        logger.error(f"All upload attempts failed for {filename}")
+        logger.error(f"All structural upload path/field permutations failed for filename: {filename}")
         return False, None
 
     def add_asset_to_album(self, asset_id: str, album_id: str) -> bool:
@@ -106,8 +135,9 @@ class ImmichClient:
 
         logger.debug(f"Adding asset {asset_id} to album {album_id}")
         try:
-            response = requests.post(
-                f"{self.server_url}/api/albums/{album_id}/assets",
+            # Modern Immich uses PUT on /api/albums/{id}/assets to update album contents
+            response = requests.put(
+                f"{self.server_url.rstrip('/')}/api/albums/{album_id}/assets",
                 json={"assetIds": [asset_id]},
                 headers=self._get_headers(),
                 timeout=30,
@@ -129,7 +159,7 @@ class ImmichClient:
 
     def upload_image(self, file_path: str, album_id: Optional[str] = None, description: Optional[str] = None) -> tuple[bool, Optional[str]]:
         """
-        Upload an image to Immich.
+        Upload an image file from a local storage path to Immich.
         Returns: (success: bool, asset_id: Optional[str])
         """
         if not self.enabled:
@@ -154,6 +184,9 @@ class ImmichClient:
             return False, None
 
     def upload_image_bytes(self, file_bytes: bytes, filename: str, album_id: Optional[str] = None, description: Optional[str] = None) -> tuple[bool, Optional[str]]:
+        """
+        Upload an image directly from its memory buffer to Immich.
+        """
         if not self.enabled:
             logger.debug("Immich is disabled, skipping upload")
             return False, None
@@ -204,7 +237,7 @@ class ImmichClient:
         try:
             logger.debug(f"Fetching albums from {self.server_url}/api/albums")
             response = requests.get(
-                f"{self.server_url}/api/albums",
+                f"{self.server_url.rstrip('/')}/api/albums",
                 headers=self._get_headers(),
                 timeout=10,
             )
@@ -235,7 +268,7 @@ class ImmichClient:
         try:
             logger.info(f"Creating album in Immich: {album_name}")
             response = requests.post(
-                f"{self.server_url}/api/albums",
+                f"{self.server_url.rstrip('/')}/api/albums",
                 json={"albumName": album_name},
                 headers=self._get_headers(),
                 timeout=10,

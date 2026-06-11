@@ -187,7 +187,7 @@ async def delete_photo(photo_id: int):
 
 @router.post("/save", response_model=SaveResponse)
 async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
-    """Save selected photos to disk and optionally upload to Immich"""
+    """Save selected photos to disk and optionally upload to Immich with description metadata"""
     try:
         # Ensure target directory exists
         os.makedirs(settings.TARGET_DIR, exist_ok=True)
@@ -197,7 +197,10 @@ async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
         now = datetime.datetime.now()
         timestamp_base = now.strftime("img%Y%m%d_%H%M%S%f")[:-4]
         saved_files = []
-        photo_to_album = {}  # Track which album each file should go to
+        
+        # New tracking registries to cleanly forward to background threads
+        photo_to_album = {}       # { file_path: album_id }
+        photo_to_description = {} # { file_path: description_text }
 
         # Save selected photos
         for photo_id in request.photo_ids:
@@ -205,7 +208,9 @@ async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
                 continue
 
             photo = current_session["photos"][photo_id]
-            custom_name = (request.custom_names or {}).get(str(photo_id), "").strip()
+            photo_id_str = str(photo_id)
+            
+            custom_name = (request.custom_names or {}).get(photo_id_str, "").strip()
             filename = (
                 f"{custom_name}.{request.file_format.lower()}"
                 if custom_name
@@ -220,32 +225,37 @@ async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
             photo.save(full_path, format=request.file_format.upper())
             saved_files.append(full_path)
             
-            # Determine album for this photo
-            photo_id_str = str(photo_id)
+            # 1. Map target descriptions out of the request payload
+            custom_description = (request.photo_descriptions or {}).get(photo_id_str, "").strip()
+            if custom_description:
+                photo_to_description[full_path] = custom_description
+            
+            # 2. Determine target album assignment
             if request.photo_album_overrides and photo_id_str in request.photo_album_overrides:
-                # Use photo-specific override (can be None to skip upload)
                 album_id = request.photo_album_overrides[photo_id_str]
             else:
-                # Use default album
                 album_id = request.default_album_id
             
-            if album_id:  # Only track if album is set
+            if album_id:  
                 photo_to_album[full_path] = album_id
             
             saved_count += 1
 
-        # Upload to Immich if requested
+        # Upload to Immich with background thread worker
         immich_status = None
         if request.upload_to_immich and settings.IMMICH_ENABLED:
             immich_client = ImmichClient()
             if immich_client.enabled:
-                # Create upload tasks for each file with its album
                 for file_path in saved_files:
                     album_id = photo_to_album.get(file_path)
+                    description = photo_to_description.get(file_path) # Extract text string
+                    
+                    # Add task with explicit arguments passed properly
                     background_tasks.add_task(
                         immich_client.upload_image,
                         file_path,
-                        album_id
+                        album_id,
+                        description
                     )
                 upload_count = len(saved_files)
                 immich_status = f"Uploading {upload_count} photos to Immich in background..."

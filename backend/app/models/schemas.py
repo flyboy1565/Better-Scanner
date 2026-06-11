@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Dict, List, Optional
 from enum import Enum
 
 
@@ -52,11 +52,11 @@ class CropRequest(BaseModel):
 class SaveRequest(BaseModel):
     photo_ids: List[int]
     file_format: str = "JPEG"
-    custom_names: Optional[dict] = None
-    photo_descriptions: Optional[dict] = None
-    upload_to_immich: bool = True
+    upload_to_immich: bool = False
     default_album_id: Optional[str] = None
-    photo_album_overrides: Optional[dict] = None  # {photo_id: album_id or None to skip}
+    custom_names: Optional[Dict[str, str]] = None          # e.g., {"0": "Grandpa_1955"}
+    photo_descriptions: Optional[Dict[str, str]] = None    # e.g., {"0": "Taken at the old house"}
+    photo_album_overrides: Optional[Dict[str, str]] = None # e.g., {"0": "album-uuid-1"}
 
 
 class SaveResponse(BaseModel):
