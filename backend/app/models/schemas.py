@@ -53,6 +53,7 @@ class SaveRequest(BaseModel):
     photo_ids: List[int]
     file_format: str = "JPEG"
     custom_names: Optional[dict] = None
+    photo_descriptions: Optional[dict] = None
     upload_to_immich: bool = True
     default_album_id: Optional[str] = None
     photo_album_overrides: Optional[dict] = None  # {photo_id: album_id or None to skip}
@@ -62,6 +63,7 @@ class SaveResponse(BaseModel):
     success: bool
     saved_count: int
     message: str
+    photo_statuses: Optional[dict] = None
     error: Optional[str] = None
     upload_count: Optional[int] = None
 

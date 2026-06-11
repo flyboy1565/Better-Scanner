@@ -1,5 +1,7 @@
 import requests
 import logging
+import mimetypes
+from io import BytesIO
 from pathlib import Path
 from typing import Optional, List
 from app.core.config import settings
@@ -51,7 +53,81 @@ class ImmichClient:
             logger.error(f"Immich health check failed: {e}", exc_info=True)
             return False
 
-    def upload_image(self, file_path: str, album_id: Optional[str] = None) -> tuple[bool, Optional[str]]:
+    def _guess_mime_type(self, filename: str) -> str:
+        mime_type, _ = mimetypes.guess_type(filename)
+        return mime_type or 'application/octet-stream'
+
+    def _try_upload(self, file_obj, filename: str, album_id: Optional[str] = None, description: Optional[str] = None) -> tuple[bool, Optional[str]]:
+        file_obj.seek(0)
+        field_names = ["file", "file[]", "files", "files[]", "asset", "assets", "image", "image[]"]
+        upload_paths = ["/api/assets", "/api/asset"]
+        data = {}
+        if description:
+            data["description"] = description
+            logger.debug(f"Adding description to upload: {description}")
+
+        for upload_path in upload_paths:
+            for field_name in field_names:
+                file_obj.seek(0)
+                logger.debug(f"Trying upload path {upload_path} with field name: {field_name}")
+                response = requests.post(
+                    f"{self.server_url}{upload_path}",
+                    files=[(field_name, (filename, file_obj, self._guess_mime_type(filename)))],
+                    data=data,
+                    headers=self._get_headers(),
+                    timeout=60,
+                )
+
+                logger.debug(f"Upload attempt {upload_path} field '{field_name}' returned {response.status_code}")
+                if response.status_code in [200, 201]:
+                    try:
+                        result = response.json()
+                        asset_id = result.get("id") or result.get("asset", {}).get("id")
+                        logger.info(f"Successfully uploaded image using {upload_path} field '{field_name}': {asset_id}")
+                        return True, asset_id
+                    except Exception as e:
+                        logger.warning(f"Could not parse asset ID from response: {e}")
+                        return True, None
+
+                if response.status_code == 400 and "Unexpected field" in response.text:
+                    logger.warning(f"Field '{field_name}' not accepted by Immich at {upload_path}, trying next field")
+                    continue
+
+                logger.error(f"Immich upload failed at {upload_path} with field '{field_name}': {response.status_code} - {response.text}")
+                return False, None
+
+        logger.error(f"All upload attempts failed for {filename}")
+        return False, None
+
+    def add_asset_to_album(self, asset_id: str, album_id: str) -> bool:
+        if not asset_id:
+            logger.warning("No asset ID provided to add to album")
+            return False
+
+        logger.debug(f"Adding asset {asset_id} to album {album_id}")
+        try:
+            response = requests.post(
+                f"{self.server_url}/api/albums/{album_id}/assets",
+                json={"assetIds": [asset_id]},
+                headers=self._get_headers(),
+                timeout=30,
+            )
+            if response.status_code in [200, 201]:
+                logger.info(f"Successfully added asset {asset_id} to album {album_id}")
+                return True
+            logger.warning(f"Failed to add asset to album: {response.status_code} - {response.text}")
+            return False
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout adding asset {asset_id} to album {album_id}")
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Connection error adding asset to album: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error adding asset to album: {e}", exc_info=True)
+            return False
+
+    def upload_image(self, file_path: str, album_id: Optional[str] = None, description: Optional[str] = None) -> tuple[bool, Optional[str]]:
         """
         Upload an image to Immich.
         Returns: (success: bool, asset_id: Optional[str])
@@ -65,57 +141,34 @@ class ImmichClient:
             return False, None
 
         try:
-            logger.debug(f"Uploading image to Immich: {file_path}")
-            data = {}
-            if album_id:
-                data["albumId"] = album_id
-                logger.debug(f"Adding to album: {album_id}")
-
-            field_names = ["file", "files", "asset", "assets", "image"]
-            response = None
-            asset_id = None
-
             with open(file_path, "rb") as file_stream:
-                for field_name in field_names:
-                    logger.debug(f"Trying upload field name: {field_name}")
-                    response = requests.post(
-                        f"{self.server_url}/api/assets",
-                        files={field_name: file_stream},
-                        data=data,
-                        headers=self._get_headers(),
-                        timeout=60,
-                    )
-
-                    logger.debug(f"Upload attempt using '{field_name}' returned {response.status_code}")
-                    if response.status_code in [200, 201]:
-                        try:
-                            result = response.json()
-                            asset_id = result.get("id") or result.get("asset", {}).get("id")
-                            logger.info(f"Successfully uploaded image using field '{field_name}': {asset_id}")
-                            return True, asset_id
-                        except Exception as e:
-                            logger.warning(f"Could not parse asset ID from response: {e}")
-                            return True, None
-
-                    if response.status_code == 400 and "Unexpected field" in response.text:
-                        logger.warning(f"Field '{field_name}' not accepted by Immich, trying next field")
-                        file_stream.seek(0)
-                        continue
-                    
-                    logger.error(f"Immich upload failed with field '{field_name}': {response.status_code} - {response.text}")
+                success, asset_id = self._try_upload(file_stream, os.path.basename(file_path), album_id=None, description=description)
+                if not success:
                     return False, None
 
-            logger.error(f"All upload field names failed for {file_path}")
-            return False, None
-
-        except requests.exceptions.Timeout:
-            logger.error(f"Upload timeout for {file_path}")
-            return False, None
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error uploading to Immich: {e}")
-            return False, None
+                if album_id and asset_id:
+                    self.add_asset_to_album(asset_id, album_id)
+                return True, asset_id
         except Exception as e:
             logger.error(f"Error uploading to Immich: {e}", exc_info=True)
+            return False, None
+
+    def upload_image_bytes(self, file_bytes: bytes, filename: str, album_id: Optional[str] = None, description: Optional[str] = None) -> tuple[bool, Optional[str]]:
+        if not self.enabled:
+            logger.debug("Immich is disabled, skipping upload")
+            return False, None
+
+        try:
+            file_obj = BytesIO(file_bytes)
+            success, asset_id = self._try_upload(file_obj, filename, album_id=None, description=description)
+            if not success:
+                return False, None
+
+            if album_id and asset_id:
+                self.add_asset_to_album(asset_id, album_id)
+            return True, asset_id
+        except Exception as e:
+            logger.error(f"Error uploading bytes to Immich: {e}", exc_info=True)
             return False, None
 
     def upload_images(self, file_paths: List[str], album_id: Optional[str] = None) -> tuple[int, int]:

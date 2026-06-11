@@ -1,0 +1,63 @@
+.crop-canvas-container {
+  padding: 20px;
+}
+
+.crop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.crop-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.crop-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.instruction {
+  padding: 12px 16px;
+  background-color: #e3f2fd;
+  border-left: 4px solid #1565c0;
+  color: #1565c0;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.box-count {
+  background-color: #1565c0;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.canvas-wrapper {
+  margin-bottom: 16px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  overflow: auto;
+  background-color: #f9f9f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+.crop-canvas {
+  cursor: crosshair;
+  max-width: 100%;
+  display: block;
+  border: 2px solid #ddd;
+}

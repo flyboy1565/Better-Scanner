@@ -1,0 +1,191 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f5f5;
+}
+
+.app-header {
+  background: white;
+  border-bottom: 1px solid #ddd;
+  padding: 16px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.app-header .flex {
+  gap: 20px;
+}
+
+.server-status,
+.immich-status {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.server-status.healthy,
+.immich-status.healthy {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.server-status.error {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.server-status.connecting {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.immich-status.offline {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.app-main {
+  flex: 1;
+  padding: 30px 0;
+}
+
+/* Mode selector */
+.mode-selector {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mode-selector label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 16px;
+  background-color: #f0f0f0;
+  color: #333;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.mode-btn.active {
+  background-color: #0066cc;
+  color: white;
+  border-color: #0052a3;
+}
+
+/* Content grid layout */
+.content-grid {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 30px;
+}
+
+@media (max-width: 1024px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .control-sidebar {
+    order: 2;
+  }
+
+  .content-area {
+    order: 1;
+  }
+}
+
+.control-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.content-area {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Gallery header */
+.gallery-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.gallery-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Empty state */
+.empty-state {
+  background: white;
+  padding: 60px 20px;
+  border-radius: 8px;
+  text-align: center;
+  color: #999;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* Loading spinner in status */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status .spinner {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.status p {
+  margin: 0;
+}

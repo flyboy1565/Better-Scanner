@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ${SAVE_PATH:-./scans}:/app/scans
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+      - DEBUG=False
+      - TARGET_DIR=/app/scans
+      - IMMICH_SERVER_URL=${IMMICH_SERVER_URL:-https://photos.example.com}
+      - IMMICH_API_KEY=${IMMICH_API_KEY:-}
+      - IMMICH_ENABLED=${IMMICH_ENABLED:-True}
+    command: python main.py
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  scans:
