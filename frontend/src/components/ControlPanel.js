@@ -14,6 +14,8 @@ function ControlPanel({ serverStatus, immichStatus }) {
     setScanInProgress,
     setFullRawScan,
     setPhotos,
+    setHistoryPhotos,
+    setScanMode,
     scanMode,
     photos,
     albums,
@@ -39,6 +41,9 @@ function ControlPanel({ serverStatus, immichStatus }) {
     try {
       const data = await scannerApi.getDevices();
       setDevices(data.devices || []);
+      if (data.warning) {
+        setError(data.warning);
+      }
       if (data.devices && data.devices.length > 0) {
         setSelectedDevice(data.devices[0]);
       }
@@ -142,6 +147,10 @@ function ControlPanel({ serverStatus, immichStatus }) {
         setSuccess(`Saved ${response.saved_count} photos!`);
         setPhotos([]);
         setFullRawScan(null);
+        const historyData = await scannerApi.getHistory();
+        if (historyData.photos) {
+          setHistoryPhotos(historyData.photos);
+        }
       } else {
         setError(response.error || 'Failed to save photos');
       }
@@ -205,6 +214,19 @@ function ControlPanel({ serverStatus, immichStatus }) {
         </div>
       </div>
 
+      <div className="control-section">
+        <label className="control-label">Work Mode</label>
+        <select
+          value={scanMode}
+          onChange={(e) => setScanMode(e.target.value)}
+          disabled={loading}
+          className="control-input"
+        >
+          <option value="auto-detect">⚡ Auto-Detect (Multi-Photo Slicer)</option>
+          <option value="manual-crop">📐 Manual Click-to-Crop Canvas</option>
+        </select>
+      </div>
+
       <button
         className="btn-primary btn-scan"
         onClick={handleScan}
@@ -216,7 +238,7 @@ function ControlPanel({ serverStatus, immichStatus }) {
       {/* Save section */}
       {photos.length > 0 && (
         <>
-          <div style={{ borderTop: '1px solid #eee', margin: '20px 0' }}></div>
+          <div style={{ borderTop: '1px solid var(--border-light)', margin: '20px 0' }}></div>
 
           <div className="control-section">
             <label className="control-label">Export Format</label>

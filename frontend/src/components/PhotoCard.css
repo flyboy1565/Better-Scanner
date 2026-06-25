@@ -2,21 +2,21 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
-  background: white;
+  background: var(--card-bg);
   transition: box-shadow 0.3s ease;
 }
 
 .photo-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
 }
 
 .photo-image-container {
   position: relative;
   overflow: hidden;
-  background-color: #f5f5f5;
+  background-color: var(--bg-tertiary);
   aspect-ratio: 1;
 }
 
@@ -56,7 +56,7 @@
 .checkbox-label {
   font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .checkbox-label {
@@ -73,15 +73,17 @@
 
 .name-input {
   padding: 6px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--input-border);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 .name-input:focus {
   outline: none;
-  border-color: #0066cc;
-  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .button-grid {
@@ -107,7 +109,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.75);
+  background-color: var(--modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -116,14 +118,14 @@
 }
 
 .modal-content {
-  background-color: #1e1e1e; /* Matches dark scheme */
-  color: #fff;
+  background-color: var(--modal-bg);
+  color: var(--modal-text);
   border-radius: 8px;
   width: 90%;
   max-width: 450px;
   padding: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  border: 1px solid #333;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--modal-border);
 }
 
 .modal-header {
@@ -131,7 +133,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 15px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--modal-border);
   padding-bottom: 10px;
 }
 
@@ -143,14 +145,14 @@
 .modal-close-btn {
   background: none;
   border: none;
-  color: #aaa;
+  color: var(--modal-close-color);
   font-size: 1.2rem;
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .modal-close-btn:hover {
-  color: #fff;
+  color: var(--modal-close-hover);
 }
 
 .text-left {
@@ -174,7 +176,7 @@
   right: 10px;
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
-  border: 1px solid #444;
+  border: 1px solid var(--border-color);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 0.8rem;

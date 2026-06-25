@@ -2,14 +2,14 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #f5f5f5;
+  background-color: var(--bg-primary);
 }
 
 .app-header {
-  background: white;
-  border-bottom: 1px solid #ddd;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border-color);
   padding: 16px 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -35,73 +35,28 @@
 
 .server-status.healthy,
 .immich-status.healthy {
-  background-color: #e8f5e9;
-  color: #2e7d32;
+  background-color: var(--success-bg);
+  color: var(--success);
 }
 
 .server-status.error {
-  background-color: #ffebee;
-  color: #c62828;
+  background-color: var(--error-bg);
+  color: var(--error);
 }
 
 .server-status.connecting {
-  background-color: #e3f2fd;
-  color: #1565c0;
+  background-color: var(--info-bg);
+  color: var(--info);
 }
 
 .immich-status.offline {
-  background-color: #fff3e0;
-  color: #e65100;
+  background-color: var(--warning-bg);
+  color: var(--warning);
 }
 
 .app-main {
   flex: 1;
   padding: 30px 0;
-}
-
-/* Mode selector */
-.mode-selector {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 30px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.mode-selector label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: #333;
-}
-
-.mode-buttons {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.mode-btn {
-  flex: 1;
-  min-width: 200px;
-  padding: 12px 16px;
-  background-color: #f0f0f0;
-  color: #333;
-  border: 2px solid transparent;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.mode-btn:hover {
-  background-color: #e0e0e0;
-}
-
-.mode-btn.active {
-  background-color: #0066cc;
-  color: white;
-  border-color: #0052a3;
 }
 
 /* Content grid layout */
@@ -142,10 +97,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: white;
+  background: var(--card-bg);
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .gallery-header h2 {
@@ -156,11 +111,11 @@
 
 /* Empty state */
 .empty-state {
-  background: white;
+  background: var(--card-bg);
   padding: 60px 20px;
   border-radius: 8px;
   text-align: center;
-  color: #999;
+  color: var(--text-muted);
 }
 
 .empty-icon {
@@ -189,3 +144,19 @@
 .status p {
   margin: 0;
 }
+
+/* History cards */
+.history-card {
+  opacity: 0.75;
+}
+
+.history-card .photo-image-container {
+  aspect-ratio: 1;
+  background-color: var(--bg-tertiary);
+}
+
+.history-card:hover {
+  opacity: 1;
+}
+
+

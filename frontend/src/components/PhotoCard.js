@@ -19,6 +19,30 @@ function EditModal({ isOpen, onClose, children }) {
   );
 }
 
+// Modal for Delete Confirmation
+function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmLabel, confirmClass }) {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{title}</h3>
+          <button className="modal-close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ margin: '12px 0', fontSize: '14px', lineHeight: '1.5' }}>{message}</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <button className="btn-sm btn-secondary" onClick={onClose}>Cancel</button>
+            <button className={`btn-sm ${confirmClass || 'btn-danger'}`} onClick={onConfirm}>
+              {confirmLabel || 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Modal for Image Expansion (Lightbox)
 function LightboxModal({ isOpen, onClose, imgSrc, altText }) {
   if (!isOpen) return null;
@@ -51,6 +75,7 @@ function PhotoCard({ photo, index }) {
   // Modal Visibility States
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   const [transforming, setTransforming] = useState(false);
   const [error, setError] = useState(null);
@@ -83,15 +108,18 @@ function PhotoCard({ photo, index }) {
     }
   };
 
-  const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this photo?')) {
-      try {
-        await scannerApi.deletePhoto(index);
-        deletePhoto(index);
-      } catch (err) {
-        setError('Delete failed');
-        console.error(err);
-      }
+  const handleDelete = () => {
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setIsDeleteConfirmOpen(false);
+    try {
+      await scannerApi.deletePhoto(index);
+      deletePhoto(index);
+    } catch (err) {
+      setError('Delete failed');
+      console.error(err);
     }
   };
 
@@ -246,6 +274,17 @@ function PhotoCard({ photo, index }) {
         onClose={() => setIsLightboxOpen(false)} 
         imgSrc={imageSrc}
         altText={`Full size extract ${index + 1}`}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete Photo"
+        message="Are you sure you want to delete this photo? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmClass="btn-danger"
       />
     </div>
   );

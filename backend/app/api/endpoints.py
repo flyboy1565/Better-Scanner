@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 import base64
 import os
 import datetime
+import logging
 from PIL import Image
 from io import BytesIO
 from typing import List, Optional
@@ -20,6 +21,8 @@ from app.services.image_processor import ImageProcessor
 from app.services.immich_client import ImmichClient
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api", tags=["scanner"])
 
 # Global state for current scan session
@@ -27,6 +30,10 @@ current_session = {
     "photos": [],
     "full_raw_scan_path": None,
 }
+
+# History of recently scanned photos (max 6)
+MAX_HISTORY = 6
+session_history = []
 
 
 def image_to_base64(image: Image.Image) -> str:
@@ -45,24 +52,32 @@ def base64_to_image(data: str) -> Image.Image:
 @router.get("/devices")
 def get_scanner_devices():
     """Get list of available scanner devices"""
+    logger.info("GET /api/devices - discovering scanner devices")
     devices = ScannerService.get_available_devices()
-    return {
-        "devices": [
-            {"name": name, "uri": uri} for name, uri in devices.items()
-        ]
-    }
+    if not devices:
+        logger.warning("No scanner devices discovered on the network")
+        return {
+            "devices": [],
+            "warning": "No scanners detected on the network. Ensure your scanner is powered on and connected.",
+        }
+    logger.info(f"Returning {len(devices)} device(s)")
+    return {"devices": devices}
 
 
 @router.post("/scan", response_model=ScanResponse)
 async def scan_document(request: ScanRequest):
     """Trigger a document scan"""
+    logger.info(f"POST /api/scan - device: {request.device_uri}, source: {request.source.value}")
     success, file_path, error = ScannerService.trigger_sane_scan(
         device_uri=request.device_uri,
         source_input=request.source.value,
     )
 
     if not success:
+        logger.error(f"Scan failed: {error}")
         raise HTTPException(status_code=400, detail=error or "Scan failed")
+
+    logger.info(f"Scan completed successfully - file: {file_path}")
 
     try:
         # Load the scanned image
@@ -260,6 +275,18 @@ async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
                 upload_count = len(saved_files)
                 immich_status = f"Uploading {upload_count} photos to Immich in background..."
 
+        # Save thumbnails to history before clearing
+        for photo in current_session["photos"]:
+            thumb = photo.copy()
+            thumb.thumbnail((200, 200))
+            thumb_b64 = image_to_base64(thumb)
+            session_history.insert(0, {
+                "thumb_base64": thumb_b64,
+                "width": photo.width,
+                "height": photo.height,
+            })
+        session_history[:] = session_history[:MAX_HISTORY]
+
         # Clear session after saving
         current_session["photos"] = []
         current_session["full_raw_scan_path"] = None
@@ -330,4 +357,30 @@ async def clear_session():
     return {
         "success": True,
         "message": "Session cleared",
+    }
+
+
+@router.get("/history")
+async def get_history():
+    """Get recent scan history thumbnails"""
+    return {
+        "photos": [
+            {
+                "id": i,
+                "base64": h["thumb_base64"],
+                "width": h["width"],
+                "height": h["height"],
+            }
+            for i, h in enumerate(session_history)
+        ]
+    }
+
+
+@router.post("/history/clear")
+async def clear_history():
+    """Clear scan history"""
+    session_history.clear()
+    return {
+        "success": True,
+        "message": "History cleared",
     }

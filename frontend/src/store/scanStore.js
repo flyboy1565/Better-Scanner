@@ -5,10 +5,12 @@ import { create } from 'zustand';
 export const useScanStore = create((set) => ({
   // Scan state
   photos: [],
+  historyPhotos: [],
   fullRawScan: null,
   scanInProgress: false,
   
   // UI state
+  theme: 'default',
   scanMode: 'auto-detect', 
   selectedDevice: null,
   selectedSource: 'Platen',
@@ -116,6 +118,7 @@ export const useScanStore = create((set) => ({
   setSelectedDevice: (device) => set({ selectedDevice: device }),
   setSelectedSource: (source) => set({ selectedSource: source }),
   setFileFormat: (format) => set({ fileFormat: format }),
+  setTheme: (theme) => set({ theme }),
   setManualBoxes: (boxes) => set({ manualBoxes: boxes }),
   setCurrentClickStart: (click) => set({ currentClickStart: click }),
   
@@ -147,4 +150,11 @@ export const useScanStore = create((set) => ({
     return { photoAlbumOverrides: newOverrides };
   }),
   setSelectedAlbum: (album) => set({ selectedAlbum: album }),
+
+  setHistoryPhotos: (photos) => set({ historyPhotos: photos }),
+
+  clearSession: () => set({
+    photos: [],
+    fullRawScan: null,
+  }),
 }));

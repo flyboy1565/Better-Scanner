@@ -4,22 +4,37 @@ import scannerApi from '../services/scannerApi';
 import ControlPanel from './ControlPanel';
 import ImageGallery from './ImageGallery';
 import CropCanvas from './CropCanvas';
+import ThemeSwitcher from './ThemeSwitcher';
 import '../styles/index.css';
 import './App.css';
 
 function App() {
   const {
     photos,
+    historyPhotos,
     fullRawScan,
     scanMode,
     setScanMode,
     clearSession,
+    setHistoryPhotos,
     scanInProgress,
-    
+    theme,
+    setTheme,
   } = useScanStore();
 
   const [serverStatus, setServerStatus] = useState('connecting');
   const [immichStatus, setImmichStatus] = useState(null);
+
+  const fetchHistory = async () => {
+    try {
+      const data = await scannerApi.getHistory();
+      if (data.photos) {
+        setHistoryPhotos(data.photos);
+      }
+    } catch (err) {
+      console.error('Failed to fetch history:', err);
+    }
+  };
 
   // Check server health on mount
   useEffect(() => {
@@ -27,6 +42,7 @@ function App() {
       try {
         await scannerApi.healthCheck();
         setServerStatus('healthy');
+        fetchHistory();
 
         // Check Immich status
         try {
@@ -43,6 +59,11 @@ function App() {
 
     checkServer();
   }, []);
+
+  // Apply theme to document element
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   return (
     <div className="app">
@@ -62,6 +83,9 @@ function App() {
               </div>
             )}
           </div>
+          <div className="flex items-center gap-4">
+            <ThemeSwitcher />
+          </div>
         </div>
       </header>
 
@@ -74,25 +98,6 @@ function App() {
               on {process.env.REACT_APP_API_URL || 'http://localhost:8000'}
             </div>
           )}
-
-          {/* Scan mode selector */}
-          <div className="mode-selector">
-            <label>Work Mode:</label>
-            <div className="mode-buttons">
-              <button
-                className={`mode-btn ${scanMode === 'auto-detect' ? 'active' : ''}`}
-                onClick={() => setScanMode('auto-detect')}
-              >
-                ⚡ Auto-Detect (Multi-Photo Slicer)
-              </button>
-              <button
-                className={`mode-btn ${scanMode === 'manual-crop' ? 'active' : ''}`}
-                onClick={() => setScanMode('manual-crop')}
-              >
-                📐 Manual Click-to-Crop Canvas
-              </button>
-            </div>
-          </div>
 
           {/* Main content grid */}
           <div className="content-grid">
@@ -131,8 +136,37 @@ function App() {
                 </>
               )}
 
+              {/* History panel */}
+              {historyPhotos.length > 0 && (
+                <div className="gallery-header">
+                  <h2>📜 Previously Scanned ({historyPhotos.length})</h2>
+                  <button
+                    className="btn-secondary btn-sm"
+                    onClick={async () => {
+                      await scannerApi.clearHistory();
+                      setHistoryPhotos([]);
+                    }}
+                  >
+                    🗑️ Clear History
+                  </button>
+                </div>
+              )}
+              {historyPhotos.length > 0 && (
+                <div className="image-gallery card">
+                  <div className="gallery-grid">
+                    {historyPhotos.map((photo, index) => (
+                      <div className="photo-card history-card" key={index}>
+                        <div className="photo-image-container">
+                          <img src={`data:image/png;base64,${photo.base64}`} alt={`Previous scan ${index + 1}`} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Empty state */}
-              {photos.length === 0 && !fullRawScan && (
+              {photos.length === 0 && !fullRawScan && historyPhotos.length === 0 && (
                 <div className="empty-state">
                   <div className="empty-icon">📸</div>
                   <p>No scans yet. Start by selecting a device and triggering a scan.</p>

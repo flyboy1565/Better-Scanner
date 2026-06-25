@@ -107,6 +107,18 @@ export const scannerApi = {
     return response.data;
   },
 
+  // Get scan history
+  getHistory: async () => {
+    const response = await api.get('/api/history');
+    return response.data;
+  },
+
+  // Clear scan history
+  clearHistory: async () => {
+    const response = await api.post('/api/history/clear');
+    return response.data;
+  },
+
   // Health check
   healthCheck: async () => {
     const response = await api.get('/health');
