@@ -121,11 +121,20 @@ class ImmichClient:
                     logger.error(f"Immich upload failed at {upload_path} with status: {response.status_code} - {response.text}")
                     return False, None
 
+                except requests.exceptions.ConnectionError as e:
+                    logger.error(f"Immich server unreachable: {e}")
+                    break
+                except requests.exceptions.Timeout as e:
+                    logger.error(f"Immich request timed out: {e}")
+                    break
                 except Exception as loop_err:
                     logger.error(f"Network transport error inside upload block logic: {loop_err}")
                     continue
+            else:
+                continue
+            break
 
-        logger.error(f"All structural upload path/field permutations failed for filename: {filename}")
+        logger.error(f"All upload attempts failed for filename: {filename} - server may be offline")
         return False, None
 
     def add_asset_to_album(self, asset_id: str, album_id: str) -> bool:

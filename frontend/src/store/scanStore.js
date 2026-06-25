@@ -1,8 +1,11 @@
 // frontend/src/store/scanStore.js
 // 1. Fixed the deprecated warning: change 'import create from "zustand"' to named import:
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-export const useScanStore = create((set) => ({
+export const useScanStore = create(
+  persist(
+    (set) => ({
   // Scan state
   photos: [],
   historyPhotos: [],
@@ -157,4 +160,11 @@ export const useScanStore = create((set) => ({
     photos: [],
     fullRawScan: null,
   }),
-}));
+}),
+{
+  name: 'better-scanner-storage',
+  partialize: (state) => ({
+    theme: state.theme,
+  }),
+},
+));
