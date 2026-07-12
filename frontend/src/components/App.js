@@ -24,6 +24,7 @@ function App() {
 
   const [serverStatus, setServerStatus] = useState('connecting');
   const [immichStatus, setImmichStatus] = useState(null);
+  const [saveMode, setSaveMode] = useState('both');
 
   const fetchHistory = async () => {
     try {
@@ -43,6 +44,14 @@ function App() {
         await scannerApi.healthCheck();
         setServerStatus('healthy');
         fetchHistory();
+
+        // Fetch config
+        try {
+          const config = await scannerApi.getConfig();
+          setSaveMode(config.save_mode || 'both');
+        } catch (error) {
+          console.warn('Failed to fetch config:', error);
+        }
 
         // Check Immich status
         try {
@@ -106,6 +115,7 @@ function App() {
               <ControlPanel
                 serverStatus={serverStatus}
                 immichStatus={immichStatus}
+                saveMode={saveMode}
               />
             </aside>
 

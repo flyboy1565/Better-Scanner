@@ -1,264 +1,114 @@
 # Better Scanner
 
-A modern multi-photo document scanner application built with FastAPI backend and React frontend, featuring Immich integration for automatic photo uploads.
+A multi-photo document scanner with Immich integration. Scans documents, auto-detects individual photos, and optionally uploads directly to Immich.
 
-## Features
+## Quick Start
 
-- **Multi-Photo Detection**: Automatically detect and separate multiple photos from a single scan
-- **Manual Cropping**: Click-to-crop canvas for precise manual image cropping
-- **Image Transformations**: Rotate and flip scanned images
-- **Immich Integration**: Automatically upload scanned photos to your Immich server
-- **Local & Cloud Storage**: Save locally to disk and upload to Immich simultaneously
-- **SANE Scanner Support**: Works with any SANE-compatible network scanner
-- **Clean UI**: Modern React frontend with intuitive controls
+```bash
+# Backend
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # edit with your settings
+python main.py
 
-## Project Structure
-
-```
-better-scanner/
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── core/           # Configuration
-│   │   ├── models/         # Pydantic schemas
-│   │   └── services/       # Business logic (scanner, image processor, Immich client)
-│   ├── main.py             # FastAPI app entry point
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/               # React frontend
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   ├── services/       # API client
-│   │   ├── store/          # Zustand state management
-│   │   └── styles/         # CSS styles
-│   ├── package.json
-│   └── .env.example
-└── README.md
+# Frontend
+cd frontend
+npm install
+npm start
 ```
 
-## Prerequisites
+Open http://localhost:3000
 
-- Python 3.9+
-- Node.js 16+
-- SANE backend (for scanner support): `sudo apt-get install sane-utils`
-- Access to a SANE-compatible scanner on your network
+## Docker (Local Development)
 
-## Backend Setup
+```bash
+# Create root .env with your save path
+echo 'SAVE_PATH=/mnt/c/Users/flybo/OneDrive/Pictures/Scanner Images ( Nana&Mom )' > .env
 
-1. **Create virtual environment**:
-   ```bash
-   cd backend
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
+docker compose up --build
+```
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+Frontend at http://localhost:3000, backend at http://localhost:8000
 
-3. **Configure environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
+## Docker (Server Deployment)
 
-   Key variables:
-   - `TARGET_DIR`: Directory to save scanned images (default: Windows OneDrive path)
-   - `IMMICH_SERVER_URL`: Your Immich server URL
-   - `IMMICH_API_KEY`: Your Immich API key (get from Immich > Settings > API Keys)
+For running on a server alongside Immich:
 
-4. **Run the backend**:
-   ```bash
-   python main.py
-   # Or with uvicorn directly:
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+```bash
+# In backend/.env, set:
+SAVE_MODE=immich_only
 
-   The API will be available at `http://localhost:8000`
-   API docs: `http://localhost:8000/docs`
+# Build frontend
+cd frontend && npm run build && cd ..
 
-## Frontend Setup
+# Start
+docker compose -f docker-compose.server.yml up -d
+```
 
-1. **Install dependencies**:
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. **Configure environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env if needed (default API URL: http://localhost:8000)
-   ```
-
-3. **Run the development server**:
-   ```bash
-   npm start
-   ```
-
-   The app will open at `http://localhost:3000`
-
-## Usage
-
-### Auto-Detect Mode
-1. Select your scanner device and paper feed source
-2. Click "🚀 Trigger Batch Scan"
-3. The system automatically detects and separates multiple photos
-4. Review and edit photos (rotate, flip, rename)
-5. Click "💾 Save Photos" to export
-
-### Manual Crop Mode
-1. Select your scanner device and trigger a scan
-2. Use the click-to-crop canvas to manually define photo areas
-3. Click top-left corner, then bottom-right corner to crop
-4. Review and edit extracted photos
-5. Save when ready
-
-### Image Editing
-- **Rotate**: Click "🔄 Left" or "🔄 Right" (90°, -90°)
-- **Flip**: Use "↔️ Flip H" (horizontal) or "↕️ Flip V" (vertical)
-- **Delete**: Remove unwanted photos
-- **Rename**: Add custom file names (or use auto-generated timestamps)
-- **Include/Exclude**: Checkbox to include/exclude photos from saving
-
-### Immich Upload
-- If Immich server is configured and healthy, photos are automatically uploaded after saving
-- Check the control panel for Immich server status
-- API key must be set in `.env` for uploads to work
-- **Select a default album** from the dropdown - all photos will upload to that album by default
-- **Per-photo control**: Uncheck "Upload to [Album Name]" on individual photos to skip uploading them to Immich (they'll still save locally)
+nginx serves everything on port 80. Frontend is proxied from `/`, backend API from `/api/`.
 
 ## Configuration
 
-### Scanner Devices
+All settings are in `backend/.env`:
 
-Edit `backend/app/services/scanner.py` to add your scanner:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SERVER_HOST` | `0.0.0.0` | Backend bind address |
+| `SERVER_PORT` | `8000` | Backend port |
+| `DEBUG` | `True` | Hot reload + debug logging |
+| `TARGET_DIR` | `./scans` | Where scanned files save to disk |
+| `RAW_SCAN_PATH` | `raw_scan_temp.jpg` | Temp file for scan output |
+| `SAVE_MODE` | `both` | Where scans go (see below) |
+| `IMMICH_SERVER_URL` | - | Immich server URL |
+| `IMMICH_API_KEY` | - | Immich API key |
+| `IMMICH_ENABLED` | `True` | Enable Immich integration |
+| `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
 
-```python
-DEVICES = {
-    "Your Scanner Name": "airscan:w3:Your Scanner URI",
-}
-```
+### Save Modes
 
-To find your scanner URI:
-```bash
-scanimage -A
-```
+| Mode | Behavior |
+|------|----------|
+| `local` | Save to disk only (`TARGET_DIR`) |
+| `immich_only` | Upload to Immich only, no local copy |
+| `both` | Save to disk AND upload to Immich |
 
-### Immich Configuration
+When `SAVE_MODE=immich_only`:
+- Manual crop mode is hidden (auto-detect only)
+- Export format selector is hidden
+- No files are written to disk
+- History thumbnails still work (generated from in-memory images)
 
-1. Get your API key from Immich:
-   - Log in to Immich
-   - Go to Settings > API Keys > Create API Key
+## How It Works
 
-2. Add to `.env`:
-   ```
-   IMMICH_SERVER_URL=https://your-immich-server.com
-   IMMICH_API_KEY=your_api_key_here
-   IMMICH_ENABLED=True
-   ```
-
-3. Test connection:
-   - Check Immich status indicator in app header
-   - Or call `GET /api/immich/health`
+1. **Scan** — Select a scanner device (auto-discovered via SANE) and trigger a batch scan
+2. **Detect** — Auto-detect mode uses OpenCV contour detection to split multiple photos from a single scan
+3. **Edit** — Rotate, flip, rename, add descriptions, assign to Immich albums
+4. **Save** — Save to disk, upload to Immich, or both
 
 ## API Endpoints
 
-### Scanner Operations
-- `GET /api/devices` - List available scanners
-- `POST /api/scan` - Trigger a scan
-- `POST /api/auto-detect` - Auto-detect photos in current scan
-- `POST /api/crop` - Manual crop from current scan
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check |
+| GET | `/config` | Non-sensitive config (includes `save_mode`) |
+| GET | `/api/devices` | List available SANE scanners |
+| POST | `/api/scan` | Trigger a scan |
+| POST | `/api/auto-detect` | Auto-detect photos from last scan |
+| POST | `/api/crop` | Manually crop areas from scan |
+| POST | `/api/transform/{id}` | Rotate/flip a photo |
+| DELETE | `/api/photo/{id}` | Delete a photo |
+| POST | `/api/save` | Save photos (to disk and/or Immich) |
+| GET | `/api/immich/health` | Check Immich server |
+| GET | `/api/immich/albums` | List Immich albums |
+| GET | `/api/session` | Current session state |
+| POST | `/api/session/clear` | Clear session |
+| GET | `/api/history` | Recent scan thumbnails |
+| POST | `/api/history/clear` | Clear history |
 
-### Photo Management
-- `POST /api/transform/{photo_id}` - Rotate/flip photos
-- `DELETE /api/photo/{photo_id}` - Delete a photo
-- `POST /api/save` - Save photos to disk and/or Immich
-- `POST /api/session/clear` - Clear current session
+## Tech Stack
 
-### Immich Integration
-- `GET /api/immich/health` - Check Immich server health
-- `GET /api/immich/albums` - Get Immich albums
-
-### System
-- `GET /health` - Health check
-- `GET /config` - Get configuration
-- `GET /api/session` - Get current session state
-
-## Troubleshooting
-
-### Scanner not found
-1. Check SANE installation: `sane-find-scanner`
-2. Verify network connectivity to scanner
-3. Try: `scanimage -A` to list available scanners
-4. Update device URI in `backend/app/services/scanner.py`
-
-### Immich upload fails
-1. Check server URL and API key in `.env`
-2. Verify Immich server is accessible: `curl https://your-server/api/server/info -H "x-api-key: your_key"`
-3. Check backend logs for detailed error messages
-
-### Frontend not loading images
-1. Verify backend is running and accessible
-2. Check CORS settings in `backend/app/core/config.py`
-3. Open browser console for API errors
-
-### Out of memory (large scans)
-1. Reduce scan resolution in `backend/app/services/scanner.py`
-2. Split large scans into multiple batches
-
-## Development
-
-### Backend Architecture
-- **FastAPI**: Async web framework
-- **Pydantic**: Data validation
-- **Pillow**: Image processing
-- **OpenCV**: Photo detection and analysis
-- **Requests**: Immich API communication
-
-### Frontend Architecture
-- **React 18**: UI framework
-- **Zustand**: State management
-- **Axios**: HTTP client
-- **CSS**: Modern styling with flexbox and grid
-
-### Adding New Features
-
-1. **New scanner**: Add to `DEVICES` in `backend/app/services/scanner.py`
-2. **New transformation**: Add method to `ImageProcessor` class
-3. **New API endpoint**: Add router to `backend/app/api/endpoints.py`
-4. **New UI component**: Create in `frontend/src/components/`
-
-## Deployment
-
-### Production Backend
-```bash
-# Use production ASGI server
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:8000 app.main:app
-```
-
-### Production Frontend
-```bash
-npm run build
-# Serve static files from build/ directory
-```
-
-### Docker (Optional)
-Create `Dockerfile` for containerized deployment.
-
-## License
-
-MIT License - Feel free to use and modify
-
-## Contributing
-
-Contributions welcome! Feel free to open issues or submit pull requests.
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review API logs: `tail -f /path/to/backend/logs`
-3. Check browser console for frontend errors
+- **Backend**: Python 3.11, FastAPI, OpenCV, Pillow, SANE (scanimage)
+- **Frontend**: React 18, Zustand, Axios
+- **Deployment**: Docker, nginx reverse proxy

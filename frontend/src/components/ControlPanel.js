@@ -3,7 +3,7 @@ import { useScanStore } from '../store/scanStore';
 import scannerApi from '../services/scannerApi';
 import './ControlPanel.css';
 
-function ControlPanel({ serverStatus, immichStatus }) {
+function ControlPanel({ serverStatus, immichStatus, saveMode }) {
   const {
     selectedDevice,
     setSelectedDevice,
@@ -214,18 +214,22 @@ function ControlPanel({ serverStatus, immichStatus }) {
         </div>
       </div>
 
-      <div className="control-section">
-        <label className="control-label">Work Mode</label>
-        <select
-          value={scanMode}
-          onChange={(e) => setScanMode(e.target.value)}
-          disabled={loading}
-          className="control-input"
-        >
-          <option value="auto-detect">⚡ Auto-Detect (Multi-Photo Slicer)</option>
-          <option value="manual-crop">📐 Manual Click-to-Crop Canvas</option>
-        </select>
-      </div>
+      {saveMode !== 'immich_only' && (
+        <div className="control-section">
+          <label className="control-label">Work Mode</label>
+          <select
+            value={scanMode}
+            onChange={(e) => setScanMode(e.target.value)}
+            disabled={loading}
+            className="control-input"
+          >
+            <option value="auto-detect">⚡ Auto-Detect (Multi-Photo Slicer)</option>
+            {saveMode === 'local' && (
+              <option value="manual-crop">📐 Manual Click-to-Crop Canvas</option>
+            )}
+          </select>
+        </div>
+      )}
 
       <button
         className="btn-primary btn-scan"
@@ -240,17 +244,19 @@ function ControlPanel({ serverStatus, immichStatus }) {
         <>
           <div style={{ borderTop: '1px solid var(--border-light)', margin: '20px 0' }}></div>
 
-          <div className="control-section">
-            <label className="control-label">Export Format</label>
-            <select
-              value={fileFormat}
-              onChange={(e) => setFileFormat(e.target.value)}
-              className="control-input"
-            >
-              <option value="JPEG">JPEG</option>
-              <option value="PNG">PNG</option>
-            </select>
-          </div>
+          {saveMode !== 'immich_only' && (
+            <div className="control-section">
+              <label className="control-label">Export Format</label>
+              <select
+                value={fileFormat}
+                onChange={(e) => setFileFormat(e.target.value)}
+                className="control-input"
+              >
+                <option value="JPEG">JPEG</option>
+                <option value="PNG">PNG</option>
+              </select>
+            </div>
+          )}
 
           {immichStatus?.enabled && albums.length > 0 && (
             <div className="control-section">
@@ -291,9 +297,11 @@ function ControlPanel({ serverStatus, immichStatus }) {
 
           {immichStatus?.enabled && (
             <p className="immich-note">
-              {immichStatus.healthy
-                ? `✓ Photos will be saved locally${selectedAlbum ? ` and uploaded to "${selectedAlbum.name}"` : ''}`
-                : '⚠️ Immich is offline - photos will be saved locally only'}
+              {saveMode === 'immich_only'
+                ? `✓ Photos will be uploaded to Immich${selectedAlbum ? ` (album: "${selectedAlbum.name}")` : ''}`
+                : immichStatus.healthy
+                  ? `✓ Photos will be saved locally${selectedAlbum ? ` and uploaded to "${selectedAlbum.name}"` : ''}`
+                  : '⚠️ Immich is offline - photos will be saved locally only'}
             </p>
           )}
         </>

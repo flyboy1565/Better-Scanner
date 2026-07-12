@@ -33,5 +33,3 @@ services:
       - backend
     restart: unless-stopped
 
-volumes:
-  scans:

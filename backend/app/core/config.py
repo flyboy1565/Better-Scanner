@@ -9,8 +9,11 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Scanner
-    TARGET_DIR: str = "/mnt/c/Users/flybo/OneDrive/Pictures/Scanner Images ( Nana&Mom )"
+    TARGET_DIR: str = "./scans"
     RAW_SCAN_PATH: str = "raw_scan_temp.jpg"
+
+    # Save Mode: "local" | "immich_only" | "both"
+    SAVE_MODE: str = "both"
 
     # Immich
     IMMICH_SERVER_URL: str = "https://photos-holfam.duckdns.org"

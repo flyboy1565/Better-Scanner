@@ -204,78 +204,86 @@ async def delete_photo(photo_id: int):
 async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
     """Save selected photos to disk and optionally upload to Immich with description metadata"""
     try:
-        # Ensure target directory exists
-        os.makedirs(settings.TARGET_DIR, exist_ok=True)
-
+        save_mode = request.save_mode or settings.SAVE_MODE
         saved_count = 0
         upload_count = 0
         now = datetime.datetime.now()
         timestamp_base = now.strftime("img%Y%m%d_%H%M%S%f")[:-4]
         saved_files = []
-        
-        # New tracking registries to cleanly forward to background threads
-        photo_to_album = {}       # { file_path: album_id }
-        photo_to_description = {} # { file_path: description_text }
+        photo_to_album = {}
+        photo_to_description = {}
 
-        # Save selected photos
+        immich_client = None
+        if request.upload_to_immich and settings.IMMICH_ENABLED:
+            immich_client = ImmichClient()
+
         for photo_id in request.photo_ids:
             if photo_id >= len(current_session["photos"]):
                 continue
 
             photo = current_session["photos"][photo_id]
             photo_id_str = str(photo_id)
-            
+
             custom_name = (request.custom_names or {}).get(photo_id_str, "").strip()
             filename = (
                 f"{custom_name}.{request.file_format.lower()}"
                 if custom_name
                 else f"{timestamp_base}_{photo_id + 1}.{request.file_format.lower()}"
             )
-            full_path = os.path.join(settings.TARGET_DIR, filename)
 
-            # Convert RGBA to RGB if saving as JPEG
-            if request.file_format.upper() == "JPEG" and photo.mode == "RGBA":
-                photo = photo.convert("RGB")
-
-            photo.save(full_path, format=request.file_format.upper())
-            saved_files.append(full_path)
-            
-            # 1. Map target descriptions out of the request payload
             custom_description = (request.photo_descriptions or {}).get(photo_id_str, "").strip()
-            if custom_description:
-                photo_to_description[full_path] = custom_description
-            
-            # 2. Determine target album assignment
+
             if request.photo_album_overrides and photo_id_str in request.photo_album_overrides:
                 album_id = request.photo_album_overrides[photo_id_str]
             else:
                 album_id = request.default_album_id
-            
-            if album_id:  
-                photo_to_album[full_path] = album_id
-            
-            saved_count += 1
 
-        # Upload to Immich with background thread worker
+            if save_mode == "immich_only":
+                if immich_client and immich_client.enabled:
+                    buf = BytesIO()
+                    photo.save(buf, format="PNG")
+                    file_bytes = buf.getvalue()
+                    background_tasks.add_task(
+                        immich_client.upload_image_bytes,
+                        file_bytes,
+                        filename,
+                        album_id,
+                        custom_description or None,
+                    )
+                saved_count += 1
+            else:
+                os.makedirs(settings.TARGET_DIR, exist_ok=True)
+                if request.file_format.upper() == "JPEG" and photo.mode == "RGBA":
+                    photo = photo.convert("RGB")
+                full_path = os.path.join(settings.TARGET_DIR, filename)
+                photo.save(full_path, format=request.file_format.upper())
+                saved_files.append(full_path)
+
+                if custom_description:
+                    photo_to_description[full_path] = custom_description
+                if album_id:
+                    photo_to_album[full_path] = album_id
+
+                saved_count += 1
+
         immich_status = None
-        if request.upload_to_immich and settings.IMMICH_ENABLED:
-            immich_client = ImmichClient()
-            if immich_client.enabled:
+        if request.upload_to_immich and settings.IMMICH_ENABLED and immich_client and immich_client.enabled:
+            if save_mode == "immich_only":
+                upload_count = saved_count
+                immich_status = f"Uploading {upload_count} photos to Immich..."
+            else:
                 for file_path in saved_files:
                     album_id = photo_to_album.get(file_path)
-                    description = photo_to_description.get(file_path) # Extract text string
-                    
-                    # Add task with explicit arguments passed properly
+                    description = photo_to_description.get(file_path)
                     background_tasks.add_task(
                         immich_client.upload_image,
                         file_path,
                         album_id,
-                        description
+                        description,
                     )
                 upload_count = len(saved_files)
                 immich_status = f"Uploading {upload_count} photos to Immich in background..."
 
-        # Save thumbnails to history before clearing
         for photo in current_session["photos"]:
             thumb = photo.copy()
             thumb.thumbnail((200, 200))
@@ -287,7 +295,6 @@ async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
             })
         session_history[:] = session_history[:MAX_HISTORY]
 
-        # Clear session after saving
         current_session["photos"] = []
         current_session["full_raw_scan_path"] = None
 
@@ -295,7 +302,7 @@ async def save_photos(request: SaveRequest, background_tasks: BackgroundTasks):
             success=True,
             saved_count=saved_count,
             upload_count=upload_count,
-            message=f"Successfully saved {saved_count} photos to {settings.TARGET_DIR}. {immich_status or ''}",
+            message=f"Successfully saved {saved_count} photos. {immich_status or ''}",
         )
     except Exception as e:
         return SaveResponse(

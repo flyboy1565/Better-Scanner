@@ -81,6 +81,7 @@ def get_config():
         "immich_server": settings.IMMICH_SERVER_URL if settings.IMMICH_ENABLED else None,
         "target_dir": settings.TARGET_DIR,
         "debug": settings.DEBUG,
+        "save_mode": settings.SAVE_MODE,
     }
 
 

@@ -57,6 +57,7 @@ class SaveRequest(BaseModel):
     custom_names: Optional[Dict[str, str]] = None          # e.g., {"0": "Grandpa_1955"}
     photo_descriptions: Optional[Dict[str, str]] = None    # e.g., {"0": "Taken at the old house"}
     photo_album_overrides: Optional[Dict[str, str]] = None # e.g., {"0": "album-uuid-1"}
+    save_mode: Optional[str] = None                        # Override server SAVE_MODE per-request
 
 
 class SaveResponse(BaseModel):
