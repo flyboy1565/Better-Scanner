@@ -40,7 +40,19 @@ app.include_router(router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Log startup information"""
+    """Log startup information and prepare environment"""
+    # Clear stale SANE cache to avoid stale device entries
+    sane_cache = os.path.expanduser("~/.cache/sane")
+    if os.path.exists(sane_cache):
+        import shutil
+        shutil.rmtree(sane_cache, ignore_errors=True)
+        logger.info(f"Cleared stale SANE cache: {sane_cache}")
+
+    # Ensure raw scan directory exists
+    raw_dir = os.path.dirname(settings.RAW_SCAN_PATH)
+    if raw_dir:
+        os.makedirs(raw_dir, exist_ok=True)
+
     logger.info("=" * 60)
     logger.info("🚀 Better Scanner API Starting")
     logger.info(f"Server: {settings.SERVER_HOST}:{settings.SERVER_PORT}")

@@ -69,11 +69,11 @@ class ScannerService:
         sane_source = "Flatbed" if source_input == "Platen" else "ADF"
         raw_scan_path = settings.RAW_SCAN_PATH
 
+        source_arg = f"--source={sane_source}"
         cmd = [
             "scanimage",
             "-d",
             device_uri,
-            f"--source={sane_source}",
             "--format=jpeg",
             "--mode=Color",
             "--resolution=600",
@@ -81,15 +81,19 @@ class ScannerService:
         ]
 
         logger.info(f"Starting scan - device: {device_uri}, source: {sane_source}, output: {raw_scan_path}")
-        logger.debug(f"Command: {' '.join(cmd)}")
-
         max_retries = 6
         retry_delay = 4.0
 
         for attempt in range(1, max_retries + 1):
             logger.info(f"Scan attempt {attempt}/{max_retries}")
+
+            effective_cmd = cmd[:]
+            effective_cmd.insert(3, source_arg)
+
+            logger.debug(f"Command: {' '.join(effective_cmd)}")
+
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=120)
+                result = subprocess.run(effective_cmd, capture_output=True, text=True, check=True, timeout=120)
 
                 if os.path.exists(raw_scan_path) and os.path.getsize(raw_scan_path) > 0:
                     file_size = os.path.getsize(raw_scan_path)
@@ -107,6 +111,23 @@ class ScannerService:
             except subprocess.CalledProcessError as e:
                 error_msg = e.stderr.strip() if e.stderr else "SANE backend error"
                 logger.error(f"Attempt {attempt} failed (rc={e.returncode}): {error_msg}")
+
+                # Retry without --source if backend rejected it
+                if "Invalid argument" in error_msg and source_arg in effective_cmd and attempt == 1:
+                    logger.info(f"Backend rejected --source, retrying without it...")
+                    effective_cmd = [a for a in effective_cmd if a != source_arg]
+                    try:
+                        result = subprocess.run(effective_cmd, capture_output=True, text=True, check=True, timeout=120)
+                        if os.path.exists(raw_scan_path) and os.path.getsize(raw_scan_path) > 0:
+                            file_size = os.path.getsize(raw_scan_path)
+                            logger.info(f"Scan successful without --source - file: {raw_scan_path}, size: {file_size} bytes")
+                            return True, raw_scan_path, None
+                        logger.warning(f"Attempt {attempt} (no --source): scanimage exited cleanly but output file is missing or empty")
+                    except subprocess.CalledProcessError as e2:
+                        logger.error(f"Retry without --source also failed (rc={e2.returncode}): {e2.stderr.strip()}")
+                    except subprocess.TimeoutExpired:
+                        logger.error(f"Retry without --source timed out (120s)")
+
                 if attempt < max_retries:
                     logger.info(f"Retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
