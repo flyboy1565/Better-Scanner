@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -18,7 +16,8 @@ services:
       - IMMICH_SERVER_URL=${IMMICH_SERVER_URL:-https://photos.example.com}
       - IMMICH_API_KEY=${IMMICH_API_KEY:-}
       - IMMICH_ENABLED=${IMMICH_ENABLED:-True}
-    command: python main.py
+      - SCANNER_IPS=${SCANNER_IPS:-${SCANNER_IP:-}}
+      - SCANNER_IP=${SCANNER_IP:-}
     restart: unless-stopped
 
   frontend:

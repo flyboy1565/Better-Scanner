@@ -52,8 +52,79 @@ For local dev, create `/home/flyboy1565/projects/better-scanner/.env` with:
 SAVE_PATH=/mnt/c/Users/flybo/OneDrive/Pictures/Scanner Images ( Nana&Mom )
 ```
 
+## WSL2 + Docker (Scanner Discovery)
+
+WiFi scanners use mDNS (multicast DNS) for discovery. On WSL2, Docker containers run inside the WSL2 VM, which is behind a NAT — mDNS packets can't reach the Windows host's LAN.
+
+**Two options to fix scanner access:**
+
+### A. Configure scanner IP statically (quickest/working)
+Find your scanner's LAN IP via nmap TCP scan from inside the container:
+
+```bash
+# First find the LAN subnet by scanning for open port 80 on gateway IPs:
+docker compose exec backend nmap -sT -p 80,443 -T5 192.168.1.1/30 192.168.0.1/30 10.0.0.1/30
+
+# Look for `open http` on port 80 — that's your router/gateway (e.g. 192.168.0.1).
+# Then scan that subnet for open port 80 or 443 to find the scanner:
+
+docker compose exec backend nmap -sT -p 443,80 --open -T5 192.168.0.0/24
+```
+
+The scanner (EPSON) eSCL endpoint runs on **port 443 (HTTPS)**, not port 9095.
+
+Add to `.env`:
+```
+# Single scanner:
+SCANNER_IP=192.168.0.55
+# Or multiple scanners (space-separated):
+SCANNER_IPS=192.168.0.55 192.168.0.25
+```
+
+The `docker-start.sh` writes them to `/etc/sane.d/airscan.conf` as `https://$IP/eSCL` entries.
+
+### B. WSL2 Mirrored Networking (mDNS auto-discovery)
+Add to `%USERPROFILE%\.wslconfig` on Windows:
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 share the host's network interfaces directly.
+
+## Changes made during Docker network session
+
+- **`backend.Dockerfile`** — Added `sane-airscan`, `avahi-daemon`, `avahi-utils`, `dbus`, `nmap`, `libgl1`
+- **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, optionally configures `airscan.conf` from `SCANNER_IP` env var (URL format: `https://$SCANNER_IP/eSCL`)
+- **`docker-compose.yml`** — Added `SCANNER_IP` env var, reverted port mapping (host networking broke WSL2 port forwarding)
+- **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
+- **`.env`** — Added `SCANNER_IP=192.168.0.55` for local EPSON scanner
+- **`AGENTS.md`** — Updated with nmap discovery instructions for finding scanner IP
+
 ## Other findings (not yet addressed)
 
 - `backend/.env` contains a live Immich API key — sensitive, don't commit
 - `backend/app/core/config.py:12` hardcodes WSL path as default — fixed to `./scans`
 - `photoSaves` checkbox doesn't actually filter photos sent to save endpoint
+
+## Scanner discovery notes
+
+### EPSON ET-2800 Series (`192.168.0.55`)
+- eSCL scanning endpoint: `https://192.168.0.55/eSCL/ScannerCapabilities`
+- S/N: `58384B4A3333343951`
+
+### EPSON WF-4720 Series (`192.168.0.25`)
+- eSCL scanning endpoint: `https://192.168.0.25/eSCL/ScannerCapabilities`
+- S/N: `583254533139383117`
+
+### Both scanners
+- Both use HTTPS on port 443 for eSCL (not port 9095)
+- Both detected by `sane-airscan` with `https://<ip>/eSCL` URLs in `airscan.conf`
+- Identified via nmap TCP scan for common printer ports (80, 443, 515, 631, 9100) on `192.168.0.0/24`
+
+- **IP**: `192.168.0.55` (EPSON, found via nmap port 443 scan on `192.168.0.0/24`)
+- **eSCL endpoint**: `https://192.168.0.55/eSCL/` (port 443, NOT 9095)
+- **IP**: `192.168.0.55` (EPSON, found via nmap port 443 scan on `192.168.0.0/24`)
+- **eSCL endpoint**: `https://192.168.0.55/eSCL/` (port 443, NOT 9095)
+- **Epson model**: EPSON ET-2800 Series (S/N: `58384B4A3333343951`)
+- **Open ports**: 443 (HTTPS/eSCL), 9100 (JetDirect), 1865, 515 (LPD), 631 (IPP)
+- Other hosts on LAN: `192.168.0.1` (router), `192.168.0.6` (unknown device with SSH), `192.168.0.102` (Linux server)
