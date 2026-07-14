@@ -28,6 +28,16 @@
 
 9. **`docker-compose.yml`** — Removed orphaned `volumes: scans:` block (was lines 36-37)
 
+#### E. Docker Networking + Scanner Discovery
+
+10. **`backend.Dockerfile`** — Added `sane-airscan`, `avahi-daemon`, `avahi-utils`, `dbus`, `nmap`, `libgl1`
+11. **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, configures `airscan.conf` from `SCANNER_IP`/`SCANNER_IPS` env vars
+12. **`docker-compose.yml`** — Added `SCANNER_IP`/`SCANNER_IPS` env vars, reverted port mapping (host networking broke WSL2 port forwarding)
+13. **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
+14. **`docker-start.sh`** — Supports `SCANNER_IPS` (space-separated) for multiple scanners, falls back to `SCANNER_IP`
+15. **`.env`** — Added `SCANNER_IPS=192.168.0.55 192.168.0.25` for local EPSON scanners
+16. **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
+
 ### To Deploy on Server
 
 1. Set `SAVE_MODE=immich_only` in `backend/.env`
@@ -91,14 +101,14 @@ networkingMode=mirrored
 ```
 Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 share the host's network interfaces directly.
 
-## Changes made during Docker network session
+## Changes made during Docker networking session
 
 - **`backend.Dockerfile`** — Added `sane-airscan`, `avahi-daemon`, `avahi-utils`, `dbus`, `nmap`, `libgl1`
-- **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, optionally configures `airscan.conf` from `SCANNER_IP` env var (URL format: `https://$SCANNER_IP/eSCL`)
-- **`docker-compose.yml`** — Added `SCANNER_IP` env var, reverted port mapping (host networking broke WSL2 port forwarding)
+- **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, configures `airscan.conf` from `SCANNER_IP`/`SCANNER_IPS` env vars (URL format: `https://$IP/eSCL`)
+- **`docker-compose.yml`** — Added `SCANNER_IP`/`SCANNER_IPS` env vars, reverted port mapping (host networking broke WSL2 port forwarding)
 - **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
-- **`.env`** — Added `SCANNER_IP=192.168.0.55` for local EPSON scanner
-- **`AGENTS.md`** — Updated with nmap discovery instructions for finding scanner IP
+- **`.env`** — Added `SCANNER_IPS=192.168.0.55 192.168.0.25` for local EPSON scanners
+- **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
 
 ## Other findings (not yet addressed)
 
@@ -121,10 +131,8 @@ Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 sha
 - Both detected by `sane-airscan` with `https://<ip>/eSCL` URLs in `airscan.conf`
 - Identified via nmap TCP scan for common printer ports (80, 443, 515, 631, 9100) on `192.168.0.0/24`
 
-- **IP**: `192.168.0.55` (EPSON, found via nmap port 443 scan on `192.168.0.0/24`)
-- **eSCL endpoint**: `https://192.168.0.55/eSCL/` (port 443, NOT 9095)
-- **IP**: `192.168.0.55` (EPSON, found via nmap port 443 scan on `192.168.0.0/24`)
-- **eSCL endpoint**: `https://192.168.0.55/eSCL/` (port 443, NOT 9095)
-- **Epson model**: EPSON ET-2800 Series (S/N: `58384B4A3333343951`)
-- **Open ports**: 443 (HTTPS/eSCL), 9100 (JetDirect), 1865, 515 (LPD), 631 (IPP)
-- Other hosts on LAN: `192.168.0.1` (router), `192.168.0.6` (unknown device with SSH), `192.168.0.102` (Linux server)
+### Other LAN hosts
+- `192.168.0.1` — Router (open: 80, 443)
+- `192.168.0.6` — Unknown device (open: 22, 80, 443)
+- `192.168.0.90` — Unknown device (open: 8080)
+- `192.168.0.102` — Linux server (open: 22, 80, 443, 8080)
