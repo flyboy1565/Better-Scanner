@@ -38,9 +38,9 @@
 - Optional future: migrate to Gitea if de-GitHubing (workflow YAML nearly portable)
 
 ### Open Decisions (needed before Phases 2-4)
-- Checkout dir: current `~/projects/better-scanner` (stable project name/network) vs clean `~/deploy/better-scanner`
-- Whether repo stays public on GitHub
-- Remove legacy manual deploy path after CI proves out
+- Checkout dir: **current `~/projects/better-scanner`** (stable project name/network) ✅ decided
+- Repo stays **public** on GitHub ✅ decided
+- Legacy rsync/scp manual deploy path: **kept as fallback** alongside CI ✅ decided
 
 ### Branch
 `server-deployment`
