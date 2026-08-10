@@ -18,6 +18,7 @@ jobs:
           rsync -az --delete \
             --exclude '.git' \
             --exclude 'frontend/node_modules' \
+            --exclude 'frontend/build' \
             --exclude 'scans' \
             --exclude '.env' \
             --exclude 'backend/.env' \
