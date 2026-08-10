@@ -1,0 +1,50 @@
+name: Deploy to Holfam
+
+on:
+  push:
+    branches:
+      - server-deployment
+
+jobs:
+  deploy:
+    name: Build + Deploy
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync repo into deploy dir
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'frontend/node_modules' \
+            --exclude 'scans' \
+            --exclude '.env' \
+            --exclude 'backend/.env' \
+            ./ "$HOME/projects/better-scanner/"
+
+      - name: Validate compose config
+        working-directory: ~/projects/better-scanner
+        run: docker compose -f docker-compose.server.yml config > /dev/null
+
+      - name: Build frontend
+        run: |
+          docker run --rm \
+            -v "$HOME/projects/better-scanner/frontend:/app" \
+            -w /app \
+            -e REACT_APP_API_URL= \
+            node:20-alpine \
+            sh -c "npm ci && npm run build"
+
+      - name: Deploy stack
+        working-directory: ~/projects/better-scanner
+        env:
+          IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
+        run: docker compose -f docker-compose.server.yml up -d --build
+
+      - name: Smoke test
+        run: |
+          set -e
+          curl -fsS http://127.0.0.1:8082/health | grep -q healthy
+          curl -fsS http://127.0.0.1:8082/config | grep -q immich_only
+          curl -fsS http://127.0.0.1:8082/api/devices | grep -q '"devices"'
