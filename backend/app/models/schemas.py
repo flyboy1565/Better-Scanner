@@ -6,6 +6,7 @@ from enum import Enum
 class ScannerDevice(BaseModel):
     name: str
     uri: str
+    ip: str = ""
 
 
 class ImmichAlbum(BaseModel):

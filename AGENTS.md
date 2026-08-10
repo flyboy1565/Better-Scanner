@@ -2,6 +2,46 @@
 
 ## Current Task: Server Deployment + Upload-Only Mode
 
+### CI/CD Plan (Phase 1 = in progress)
+
+**Decision:** GitHub Actions + self-hosted runner on `holfam`. Repo already lives on GitHub (public, default `main`, deploy branch `server-deployment`). Server is internet-connected, so the runner (which polls GitHub outbound) works fine; the scanner stays LAN-only because all deploy steps run on `holfam` itself.
+
+- Deploy trigger: **auto-deploy on push to `server-deployment`**
+- Secrets: **GitHub Actions secrets** → injected at deploy time (Immich key never lives in repo or a stale server `.env`)
+
+#### Phase 1 (in progress) — Repo foundation
+1. Record this plan in `AGENTS.md`
+2. Commit + push current `server-deployment` work (scanner fields in config, nginx brace fix, frontend API-URL fix, compose rewrite)
+3. Restructure env handling:
+   - Non-secret values (scanner IPs, SAVE_MODE, URLs, ports) → inline in `docker-compose.server.yml` `environment:`
+   - `IMMICH_API_KEY` → `${IMMICH_API_KEY:?}` in compose, provided by CI
+   - Remove stale server `backend/.env` (gitignored) so the key isn't live outside the secret store
+
+#### Phase 2 — Workflow file
+- `.github/workflows/deploy.yml`: trigger `push` to `server-deployment` only, `runs-on: self-hosted` (label `holfam`)
+- Steps (all run on holfam):
+  1. `actions/checkout@v4`
+  2. `docker compose -f docker-compose.server.yml config` (early validation)
+  3. `cd frontend && npm ci && REACT_APP_API_URL= npm run build` (same-origin relative API)
+  4. Inject secrets → compose environment
+  5. `docker compose -f docker-compose.server.yml up -d --build`
+  6. Smoke test: curl `/health`, `/config`, `/api/devices` on `127.0.0.1:8082`; fail job if unhealthy
+
+#### Phase 3 — Self-hosted runner on `holfam`
+- Register runner (label `holfam`) in repo Settings → Actions → Runners, run as `flyboy1565`
+- systemd service (`./svc.sh install && ./svc.sh start`) for persistence
+- Restrict: no `pull_request` triggers (fork PRs = arbitrary code on server). Use GH "approve workflow runs from outside collaborators" for self-hosted.
+
+#### Phase 4 — Cutover
+- Remove legacy rsync/scp deploy path and stale server `backend/.env`
+- Rollback = push/revert a commit to `server-deployment`
+- Optional future: migrate to Gitea if de-GitHubing (workflow YAML nearly portable)
+
+### Open Decisions (needed before Phases 2-4)
+- Checkout dir: current `~/projects/better-scanner` (stable project name/network) vs clean `~/deploy/better-scanner`
+- Whether repo stays public on GitHub
+- Remove legacy manual deploy path after CI proves out
+
 ### Branch
 `server-deployment`
 
@@ -35,14 +75,20 @@
 12. **`docker-compose.yml`** — Added `SCANNER_IP`/`SCANNER_IPS` env vars, reverted port mapping (host networking broke WSL2 port forwarding)
 13. **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
 14. **`docker-start.sh`** — Supports `SCANNER_IPS` (space-separated) for multiple scanners, falls back to `SCANNER_IP`
-15. **`.env`** — Added `SCANNER_IPS=192.168.0.55 192.168.0.25` for local EPSON scanners
+15. **`.env`** — Added `SCANNER_IPS=192.168.68.61 192.168.68.64` for local EPSON scanners
 16. **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
 
-### To Deploy on Server
+### To Deploy on Server (current, pre-CI)
 
 1. Set `SAVE_MODE=immich_only` in `backend/.env`
 2. Build frontend: `cd frontend && npm run build`
-3. Run: `docker compose -f docker-compose.server.yml up -d`
+3. Run: `docker compose -f docker-compose.server.yml up -d --build`
+4. Access on LAN: `http://192.168.68.62:8082` (nginx bound to host port 8082; 80/443 owned by nginx-proxy-manager)
+5. Servers alive on `holfam`:
+   - `better-scanner-backend` / `better-scanner-nginx` (containers)
+   - Both on `webproxy` (external) + `better-scanner_default` networks so npm can route to them by container name
+   - Backend reaches Immich at internal `http://immich_server:2283` (same webproxy network)
+   - nginx upstream → `better-scanner-backend:8000`
 
 ### Key Notes
 
@@ -73,12 +119,12 @@ Find your scanner's LAN IP via nmap TCP scan from inside the container:
 
 ```bash
 # First find the LAN subnet by scanning for open port 80 on gateway IPs:
-docker compose exec backend nmap -sT -p 80,443 -T5 192.168.1.1/30 192.168.0.1/30 10.0.0.1/30
+docker compose exec backend nmap -sT -p 80,443 -T5 192.168.68.0/22
 
-# Look for `open http` on port 80 — that's your router/gateway (e.g. 192.168.0.1).
-# Then scan that subnet for open port 80 or 443 to find the scanner:
+# Look for `open http` on port 80 — that's your router/gateway.
+# Then scan that subnet for open printer ports to find the scanner:
 
-docker compose exec backend nmap -sT -p 443,80 --open -T5 192.168.0.0/24
+docker compose exec backend nmap -sT -p 443,80,515,631,9100 --open -T5 192.168.68.0/22
 ```
 
 The scanner (EPSON) eSCL endpoint runs on **port 443 (HTTPS)**, not port 9095.
@@ -86,9 +132,9 @@ The scanner (EPSON) eSCL endpoint runs on **port 443 (HTTPS)**, not port 9095.
 Add to `.env`:
 ```
 # Single scanner:
-SCANNER_IP=192.168.0.55
+SCANNER_IP=192.168.68.61
 # Or multiple scanners (space-separated):
-SCANNER_IPS=192.168.0.55 192.168.0.25
+SCANNER_IPS=192.168.68.61 192.168.68.64
 ```
 
 The `docker-start.sh` writes them to `/etc/sane.d/airscan.conf` as `https://$IP/eSCL` entries.
@@ -107,7 +153,7 @@ Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 sha
 - **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, configures `airscan.conf` from `SCANNER_IP`/`SCANNER_IPS` env vars (URL format: `https://$IP/eSCL`)
 - **`docker-compose.yml`** — Added `SCANNER_IP`/`SCANNER_IPS` env vars, reverted port mapping (host networking broke WSL2 port forwarding)
 - **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
-- **`.env`** — Added `SCANNER_IPS=192.168.0.55 192.168.0.25` for local EPSON scanners
+- **`.env`** — Added `SCANNER_IPS=192.168.68.67 192.168.68.61` for local EPSON scanners
 - **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
 
 ## Other findings (not yet addressed)
@@ -118,21 +164,22 @@ Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 sha
 
 ## Scanner discovery notes
 
-### EPSON ET-2800 Series (`192.168.0.55`)
-- eSCL scanning endpoint: `https://192.168.0.55/eSCL/ScannerCapabilities`
+### EPSON ET-2800 Series (`192.168.68.61`)
+- eSCL scanning endpoint: `https://192.168.68.61/eSCL/ScannerCapabilities`
 - S/N: `58384B4A3333343951`
 
-### EPSON WF-4720 Series (`192.168.0.25`)
-- eSCL scanning endpoint: `https://192.168.0.25/eSCL/ScannerCapabilities`
+### EPSON WF-4720 Series (`192.168.68.64`)
+- eSCL scanning endpoint: `https://192.168.68.64/eSCL/ScannerCapabilities`
 - S/N: `583254533139383117`
 
 ### Both scanners
 - Both use HTTPS on port 443 for eSCL (not port 9095)
 - Both detected by `sane-airscan` with `https://<ip>/eSCL` URLs in `airscan.conf`
-- Identified via nmap TCP scan for common printer ports (80, 443, 515, 631, 9100) on `192.168.0.0/24`
+- Identified via nmap TCP scan for common printer ports (80, 443, 515, 631, 9100) on `192.168.68.0/22`
 
 ### Other LAN hosts
-- `192.168.0.1` — Router (open: 80, 443)
-- `192.168.0.6` — Unknown device (open: 22, 80, 443)
-- `192.168.0.90` — Unknown device (open: 8080)
-- `192.168.0.102` — Linux server (open: 22, 80, 443, 8080)
+- `192.168.68.1` — Router (open: 80, 443)
+- `192.168.68.51` — Unknown device
+- `192.168.68.52` — Unknown device
+- `192.168.68.59` — Unknown device
+- `192.168.71.250` — Unknown device (open: 80, 443)

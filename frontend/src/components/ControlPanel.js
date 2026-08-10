@@ -12,6 +12,7 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
     fileFormat,
     setFileFormat,
     setScanInProgress,
+    setScanStatusMessage,
     setFullRawScan,
     setPhotos,
     setHistoryPhotos,
@@ -29,7 +30,6 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Fetch available devices and albums
   useEffect(() => {
     if (serverStatus === 'healthy') {
       fetchDevices();
@@ -45,7 +45,11 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
         setError(data.warning);
       }
       if (data.devices && data.devices.length > 0) {
-        setSelectedDevice(data.devices[0]);
+        const currentUri = selectedDevice?.uri;
+        const stillExists = currentUri && data.devices.some((d) => d.uri === currentUri);
+        if (!stillExists) {
+          setSelectedDevice(data.devices[0]);
+        }
       }
     } catch (err) {
       setError('Failed to load scanner devices');
@@ -77,9 +81,9 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
     setLoading(true);
     setError(null);
     setScanInProgress(true);
+    setScanStatusMessage('Connecting to scanner...');
 
     try {
-      // Trigger scan
       const scanResponse = await scannerApi.scan(
         selectedDevice.uri,
         selectedSource
@@ -89,14 +93,14 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
         throw new Error(scanResponse.error || 'Scan failed');
       }
 
-      // Set full raw scan image
+      setScanStatusMessage('Processing scanned image...');
+
       setFullRawScan(scanResponse.image_base64);
 
-      // Auto-detect photos if in auto-detect mode
       if (scanMode === 'auto-detect') {
+        setScanStatusMessage('Detecting photos...');
         const detectionResponse = await scannerApi.autoDetect();
         if (detectionResponse.success && detectionResponse.photos) {
-          // Convert base64 images to photo objects for the gallery
           const photoObjects = detectionResponse.photos.map((photo) => ({
             id: photo.id,
             base64: photo.image_base64,
@@ -111,11 +115,19 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
         setPhotos([]);
       }
     } catch (err) {
-      setError(err.message || 'Failed to scan');
+      const detail = err.response?.data?.detail || err.message || 'Failed to scan';
+      if (detail.startsWith('CONNECTION_ISSUE:')) {
+        setError('🔌 Cannot connect to scanner — check power and network connection');
+      } else if (detail.startsWith('SCAN_FAILED:')) {
+        setError('📄 Scan failed — try adjusting settings or restarting the scanner');
+      } else {
+        setError(detail);
+      }
       console.error(err);
     } finally {
       setLoading(false);
       setScanInProgress(false);
+      setScanStatusMessage('');
     }
   };
 
@@ -182,7 +194,7 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
           <option value="">-- Select Scanner --</option>
           {devices.map((device) => (
             <option key={device.uri} value={device.uri}>
-              {device.name}
+              {device.ip ? `${device.name} (${device.ip})` : device.name}
             </option>
           ))}
         </select>
@@ -239,7 +251,6 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
         {loading ? '⏳ Scanning...' : '🚀 Trigger Batch Scan'}
       </button>
 
-      {/* Save section */}
       {photos.length > 0 && (
         <>
           <div style={{ borderTop: '1px solid var(--border-light)', margin: '20px 0' }}></div>
@@ -307,7 +318,6 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
         </>
       )}
 
-      {/* Status messages */}
       {error && <div className="status status-error">{error}</div>}
       {success && (
         <div className="status status-success">

@@ -11,6 +11,7 @@ export const useScanStore = create(
   historyPhotos: [],
   fullRawScan: null,
   scanInProgress: false,
+  scanStatusMessage: "",
   
   // UI state
   theme: 'default',
@@ -117,6 +118,7 @@ export const useScanStore = create(
   
   setFullRawScan: (scan) => set({ fullRawScan: scan }),
   setScanInProgress: (inProgress) => set({ scanInProgress: inProgress }),
+  setScanStatusMessage: (msg) => set({ scanStatusMessage: msg }),
   setScanMode: (mode) => set({ scanMode: mode }),
   setSelectedDevice: (device) => set({ selectedDevice: device }),
   setSelectedSource: (source) => set({ selectedSource: source }),
@@ -165,6 +167,8 @@ export const useScanStore = create(
   name: 'better-scanner-storage',
   partialize: (state) => ({
     theme: state.theme,
+    selectedDevice: state.selectedDevice,
+    selectedSource: state.selectedSource,
   }),
 },
 ));

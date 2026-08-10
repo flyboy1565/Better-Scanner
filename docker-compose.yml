@@ -6,7 +6,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app/backend
+      - ./backend/app:/app/app
+      - ./backend/main.py:/app/main.py
       - ${SAVE_PATH:-./scans}:/app/scans
     environment:
       - SERVER_HOST=0.0.0.0
@@ -18,6 +19,8 @@ services:
       - IMMICH_ENABLED=${IMMICH_ENABLED:-True}
       - SCANNER_IPS=${SCANNER_IPS:-${SCANNER_IP:-}}
       - SCANNER_IP=${SCANNER_IP:-}
+      - SCANNER_NAMES=${SCANNER_NAMES:-}
+      - SCAN_RESOLUTION=${SCAN_RESOLUTION:-600}
     restart: unless-stopped
 
   frontend:

@@ -18,6 +18,7 @@ function App() {
     clearSession,
     setHistoryPhotos,
     scanInProgress,
+    scanStatusMessage,
     theme,
     setTheme,
   } = useScanStore();
@@ -104,7 +105,7 @@ function App() {
           {serverStatus === 'error' && (
             <div className="status status-error">
               <strong>Error:</strong> Cannot connect to API server. Make sure the FastAPI backend is running
-              on {process.env.REACT_APP_API_URL || 'http://localhost:8000'}
+              on {process.env.REACT_APP_API_URL || 'the server'}
             </div>
           )}
 
@@ -121,10 +122,10 @@ function App() {
 
             {/* Right panel - Content Area */}
             <section className="content-area">
-              {scanInProgress && (
+              {scanInProgress && scanStatusMessage && (
                 <div className="status status-loading">
                   <div className="spinner"></div>
-                  <p>Scanning in progress... Please wait</p>
+                  <p>{scanStatusMessage}</p>
                 </div>
               )}
 

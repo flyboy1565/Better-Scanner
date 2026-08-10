@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     # Scanner
     TARGET_DIR: str = "./scans"
     RAW_SCAN_PATH: str = "raw_scan_temp.jpg"
+    SCAN_RESOLUTION: int = 600
+
+    # Static scanner IPs/names (space-separated, consumed by docker-start.sh)
+    SCANNER_IPS: str = ""
+    SCANNER_NAMES: str = ""
+    SCANNER_IP: str = ""
+    SCANNER_NAME: str = ""
 
     # Save Mode: "local" | "immich_only" | "both"
     SAVE_MODE: str = "both"

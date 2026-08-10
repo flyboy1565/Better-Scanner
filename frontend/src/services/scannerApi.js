@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 120000, // 2 minutes for scanning operations
+  timeout: 300000, // 5 minutes: 600 DPI flatbed scans can take a while
 });
 
 export const scannerApi = {
@@ -65,7 +65,7 @@ export const scannerApi = {
     photoAlbumOverrides = {},
     photoDescriptions = {} // ✨ Match parameter signature 
   ) => {
-    const response = await fetch('http://localhost:8000/api/save', {
+    const response = await fetch(`${API_URL}/api/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
