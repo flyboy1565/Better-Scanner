@@ -26,6 +26,8 @@ jobs:
 
       - name: Validate compose config
         working-directory: ~/projects/better-scanner
+        env:
+          IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
         run: docker compose -f docker-compose.server.yml config > /dev/null
 
       - name: Build frontend
