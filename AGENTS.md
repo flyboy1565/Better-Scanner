@@ -80,11 +80,11 @@
 
 ### To Deploy on Server (current, pre-CI)
 
-1. Set `SAVE_MODE=immich_only` in `backend/.env`
-2. Build frontend: `cd frontend && npm run build`
-3. Run: `docker compose -f docker-compose.server.yml up -d --build`
-4. Access on LAN: `http://192.168.68.62:8082` (nginx bound to host port 8082; 80/443 owned by nginx-proxy-manager)
-5. Servers alive on `holfam`:
+1. From the repo root, run with the secret in the environment:
+   `IMMICH_API_KEY=... docker compose -f docker-compose.server.yml up -d --build`
+2. `docker-compose.server.yml` has all non-secret config inline in `environment:`; only the key comes from the env var (`${IMMICH_API_KEY:?}`)
+3. Access on LAN: `http://192.168.68.62:8082` (nginx bound to host port 8082; 80/443 owned by nginx-proxy-manager)
+4. Servers alive on `holfam`:
    - `better-scanner-backend` / `better-scanner-nginx` (containers)
    - Both on `webproxy` (external) + `better-scanner_default` networks so npm can route to them by container name
    - Backend reaches Immich at internal `http://immich_server:2283` (same webproxy network)

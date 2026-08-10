@@ -1,0 +1,11 @@
+.git
+.venv
+backend/.venv
+**/__pycache__
+**/*.pyc
+frontend/node_modules
+raw_scan_temp.jpg
+frontend/build
+.env
+backend/.env
+scans

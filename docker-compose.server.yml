@@ -5,12 +5,20 @@ services:
       dockerfile: backend.Dockerfile
     container_name: better-scanner-backend
     restart: unless-stopped
-    env_file: ./backend/.env
     environment:
       - DEBUG=False
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8000
       - TARGET_DIR=/app/scans
+      - RAW_SCAN_PATH=/app/raw_scan_temp.jpg
+      - SCAN_RESOLUTION=600
+      - SAVE_MODE=immich_only
+      - SCANNER_IPS=192.168.68.61 192.168.68.64
+      - SCANNER_NAMES=ET-2800 WF-4720
+      - IMMICH_SERVER_URL=http://immich_server:2283
+      - IMMICH_ENABLED=True
+      - IMMICH_API_KEY=${IMMICH_API_KEY:?set IMMICH_API_KEY in environment}
+      - CORS_ORIGINS=["http://localhost:3000", "http://localhost", "http://192.168.68.62:8082"]
     volumes:
       - ./scans:/app/scans
     networks:
