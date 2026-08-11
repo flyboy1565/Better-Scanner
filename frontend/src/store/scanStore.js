@@ -1,121 +1,59 @@
 // frontend/src/store/scanStore.js
-// 1. Fixed the deprecated warning: change 'import create from "zustand"' to named import:
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import scannerApi from '../services/scannerApi';
 
 export const useScanStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
   // Scan state
   photos: [],
   historyPhotos: [],
   fullRawScan: null,
   scanInProgress: false,
   scanStatusMessage: "",
-  
+
   // UI state
   theme: 'default',
-  scanMode: 'auto-detect', 
+  scanMode: 'auto-detect',
   selectedDevice: null,
   selectedSource: 'Platen',
   fileFormat: 'JPEG',
-  
+
   // Album state
   albums: [],
   selectedAlbum: null,
-  photoAlbumOverrides: {}, 
 
-  // Photo metadata
-  photoNames: {},
-  photoSaves: {},
-  photoDescriptions: {},
-  photoStatuses: {},
+  // Scanner operation state
+  devices: [],
+  loading: false,
+  error: null,
+  success: null,
+  immichEnabled: false,
 
   // Actions
   // Explicit setter to directly replace or clear the global photos array
-  setPhotos: (photoObjects) => set((state) => {
-    const newNames = { ...state.photoNames };
-    const newSaves = { ...state.photoSaves };
-    const newDescriptions = { ...state.photoDescriptions };
-    const newStatuses = { ...state.photoStatuses };
-
-    photoObjects.forEach((_, idx) => {
-      if (newNames[idx] === undefined) newNames[idx] = '';
-      if (newSaves[idx] === undefined) newSaves[idx] = true;
-      if (newDescriptions[idx] === undefined) newDescriptions[idx] = '';
-      if (newStatuses[idx] === undefined) newStatuses[idx] = 'pending';
-    });
-
-    return { 
-      photos: photoObjects,
-      photoNames: newNames,
-      photoSaves: newSaves,
-      photoDescriptions: newDescriptions,
-      photoStatuses: newStatuses
-    };
-  }),
+  setPhotos: (photoObjects) => set({ photos: photoObjects }),
 
   // Explicit setter to assign fetched Immich albums
   setAlbums: (albumList) => set({ albums: albumList }),
 
-  addPhotos: (newPhotos) => set((state) => {
-    const nextIndex = state.photos.length;
-    const newNames = { ...state.photoNames };
-    const newSaves = { ...state.photoSaves };
-    const newDescriptions = { ...state.photoDescriptions };
-    const newStatuses = { ...state.photoStatuses };
-
-    newPhotos.forEach((_, idx) => {
-      const index = nextIndex + idx;
-      newNames[index] = '';
-      newSaves[index] = true;
-      newDescriptions[index] = '';
-      newStatuses[index] = 'pending';
-    });
-
-    return {
-      photos: [...state.photos, ...newPhotos],
-      photoNames: newNames,
-      photoSaves: newSaves,
-      photoDescriptions: newDescriptions,
-      photoStatuses: newStatuses,
-    };
-  }),
+  setDevices: (devices) => set({ devices }),
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+  setSuccess: (success) => set({ success }),
+  setImmichEnabled: (enabled) => set({ immichEnabled: enabled }),
 
   updatePhoto: (index, photo) => set((state) => {
     const newPhotos = [...state.photos];
     newPhotos[index] = photo;
     return { photos: newPhotos };
   }),
-  
-  deletePhoto: (index) => set((state) => {
-    const newPhotos = state.photos.filter((_, i) => i !== index);
-    const newNames = {};
-    const newSaves = {};
-    const newDescriptions = {};
-    const newStatuses = {};
-    const newOverrides = {};
 
-    newPhotos.forEach((photo, idx) => {
-      newNames[idx] = state.photoNames[idx >= index ? idx + 1 : idx] || '';
-      newSaves[idx] = state.photoSaves[idx >= index ? idx + 1 : idx] !== false;
-      newDescriptions[idx] = state.photoDescriptions[idx >= index ? idx + 1 : idx] || '';
-      newStatuses[idx] = state.photoStatuses[idx >= index ? idx + 1 : idx] || 'pending';
-      if (state.photoAlbumOverrides[idx >= index ? idx + 1 : idx] !== undefined) {
-        newOverrides[idx] = state.photoAlbumOverrides[idx >= index ? idx + 1 : idx];
-      }
-    });
+  deletePhoto: (index) => set((state) => ({
+    photos: state.photos.filter((_, i) => i !== index),
+  })),
 
-    return {
-      photos: newPhotos,
-      photoNames: newNames,
-      photoSaves: newSaves,
-      photoDescriptions: newDescriptions,
-      photoStatuses: newStatuses,
-      photoAlbumOverrides: newOverrides,
-    };
-  }),
-  
   setFullRawScan: (scan) => set({ fullRawScan: scan }),
   setScanInProgress: (inProgress) => set({ scanInProgress: inProgress }),
   setScanStatusMessage: (msg) => set({ scanStatusMessage: msg }),
@@ -126,37 +64,136 @@ export const useScanStore = create(
   setTheme: (theme) => set({ theme }),
   setManualBoxes: (boxes) => set({ manualBoxes: boxes }),
   setCurrentClickStart: (click) => set({ currentClickStart: click }),
-  
-  updatePhotoName: (index, name) => set((state) => ({
-    photoNames: { ...state.photoNames, [index]: name },
-  })),
-  
-  updatePhotoSave: (index, shouldSave) => set((state) => ({
-    photoSaves: { ...state.photoSaves, [index]: shouldSave },
-  })),
-
-  updatePhotoDescription: (index, description) => set((state) => ({
-    photoDescriptions: { ...state.photoDescriptions, [index]: description },
-  })),
-
-  updatePhotoStatus: (index, status) => set((state) => ({
-    photoStatuses: { ...state.photoStatuses, [index]: status },
-  })),
-  
-  setPhotoStatuses: (statuses) => set({ photoStatuses: statuses }),
-  
-  setPhotoAlbumOverride: (index, albumId) => set((state) => ({
-    photoAlbumOverrides: { ...state.photoAlbumOverrides, [index]: albumId }
-  })),
-
-  clearPhotoAlbumOverride: (index) => set((state) => {
-    const newOverrides = { ...state.photoAlbumOverrides };
-    delete newOverrides[index];
-    return { photoAlbumOverrides: newOverrides };
-  }),
   setSelectedAlbum: (album) => set({ selectedAlbum: album }),
-
   setHistoryPhotos: (photos) => set({ historyPhotos: photos }),
+
+  fetchDevices: async () => {
+    try {
+      const data = await scannerApi.getDevices();
+      set({ devices: data.devices || [] });
+      if (data.warning) {
+        set({ error: data.warning });
+      }
+      if (data.devices && data.devices.length > 0) {
+        const currentUri = get().selectedDevice?.uri;
+        const stillExists = currentUri && data.devices.some((d) => d.uri === currentUri);
+        if (!stillExists) {
+          set({ selectedDevice: data.devices[0] });
+        }
+      }
+    } catch (err) {
+      set({ error: 'Failed to load scanner devices' });
+      console.error(err);
+    }
+  },
+
+  fetchAlbums: async () => {
+    if (!get().immichEnabled) return;
+    try {
+      const data = await scannerApi.getImmichAlbums();
+      if (data.albums && Array.isArray(data.albums)) {
+        set({ albums: data.albums });
+        if (data.albums.length > 0 && !get().selectedAlbum) {
+          set({ selectedAlbum: data.albums[0] });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load albums:', err);
+    }
+  },
+
+  handleScan: async () => {
+    const state = get();
+    if (!state.selectedDevice) {
+      set({ error: 'Please select a scanner device' });
+      return;
+    }
+
+    set({ loading: true, error: null, scanInProgress: true });
+    set({ scanStatusMessage: 'Connecting to scanner...' });
+
+    try {
+      const scanResponse = await scannerApi.scan(
+        state.selectedDevice.uri,
+        state.selectedSource
+      );
+
+      if (!scanResponse.success) {
+        throw new Error(scanResponse.error || 'Scan failed');
+      }
+
+      set({ scanStatusMessage: 'Processing scanned image...' });
+      set({ fullRawScan: scanResponse.image_base64 });
+
+      if (state.scanMode === 'auto-detect') {
+        set({ scanStatusMessage: 'Detecting photos...' });
+        const detectionResponse = await scannerApi.autoDetect();
+        if (detectionResponse.success && detectionResponse.photos) {
+          const photoObjects = detectionResponse.photos.map((photo) => ({
+            id: photo.id,
+            base64: photo.image_base64,
+            width: photo.width,
+            height: photo.height,
+          }));
+          set({ photos: photoObjects });
+          set({ success: `Successfully detected ${detectionResponse.photo_count} photos!` });
+        }
+      } else {
+        set({ success: 'Scan completed! Ready for manual cropping.' });
+        set({ photos: [] });
+      }
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message || 'Failed to scan';
+      if (detail.startsWith('CONNECTION_ISSUE:')) {
+        set({ error: '🔌 Cannot connect to scanner — check power and network connection' });
+      } else if (detail.startsWith('SCAN_FAILED:')) {
+        set({ error: '📄 Scan failed — try adjusting settings or restarting the scanner' });
+      } else {
+        set({ error: detail });
+      }
+      console.error(err);
+    } finally {
+      set({ loading: false, scanInProgress: false });
+      set({ scanStatusMessage: '' });
+    }
+  },
+
+  handleSavePhotos: async () => {
+    const state = get();
+    if (state.photos.length === 0) {
+      set({ error: 'No photos to save' });
+      return;
+    }
+
+    set({ loading: true, error: null });
+
+    try {
+      const photoIds = state.photos.map((_, i) => i);
+      const response = await scannerApi.savePhotos(
+        photoIds,
+        state.fileFormat,
+        state.immichEnabled,
+        state.selectedAlbum?.id || null
+      );
+
+      if (response.success) {
+        set({ success: `Saved ${response.saved_count} photos!` });
+        set({ photos: [] });
+        set({ fullRawScan: null });
+        const historyData = await scannerApi.getHistory();
+        if (historyData.photos) {
+          set({ historyPhotos: historyData.photos });
+        }
+      } else {
+        set({ error: response.error || 'Failed to save photos' });
+      }
+    } catch (err) {
+      set({ error: err.message || 'Failed to save photos' });
+      console.error(err);
+    } finally {
+      set({ loading: false });
+    }
+  },
 
   clearSession: () => set({
     photos: [],

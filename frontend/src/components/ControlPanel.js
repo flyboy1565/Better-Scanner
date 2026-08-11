@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useScanStore } from '../store/scanStore';
-import scannerApi from '../services/scannerApi';
 import './ControlPanel.css';
 
-function ControlPanel({ serverStatus, immichStatus, saveMode }) {
+function ControlPanel({ serverStatus, immichStatus, saveMode, showActions = true }) {
   const {
     selectedDevice,
     setSelectedDevice,
@@ -11,168 +10,33 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
     setSelectedSource,
     fileFormat,
     setFileFormat,
-    setScanInProgress,
-    setScanStatusMessage,
-    setFullRawScan,
-    setPhotos,
-    setHistoryPhotos,
-    setScanMode,
     scanMode,
+    setScanMode,
     photos,
     albums,
     setAlbums,
     selectedAlbum,
     setSelectedAlbum,
+    devices,
+    fetchDevices,
+    fetchAlbums,
+    handleScan,
+    handleSavePhotos,
+    loading,
+    error,
+    success,
+    setSuccess,
   } = useScanStore();
-
-  const [devices, setDevices] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
 
   useEffect(() => {
     if (serverStatus === 'healthy') {
       fetchDevices();
-      if (immichStatus?.enabled) fetchAlbums();
-    }
-  }, [serverStatus, immichStatus]);
-
-  const fetchDevices = async () => {
-    try {
-      const data = await scannerApi.getDevices();
-      setDevices(data.devices || []);
-      if (data.warning) {
-        setError(data.warning);
+      if (immichStatus?.enabled) {
+        setAlbums([]);
+        fetchAlbums();
       }
-      if (data.devices && data.devices.length > 0) {
-        const currentUri = selectedDevice?.uri;
-        const stillExists = currentUri && data.devices.some((d) => d.uri === currentUri);
-        if (!stillExists) {
-          setSelectedDevice(data.devices[0]);
-        }
-      }
-    } catch (err) {
-      setError('Failed to load scanner devices');
-      console.error(err);
     }
-  };
-
-  const fetchAlbums = async () => {
-    if (!immichStatus?.enabled) return;
-    try {
-      const data = await scannerApi.getImmichAlbums();
-      if (data.albums && Array.isArray(data.albums)) {
-        setAlbums(data.albums);
-        if (data.albums.length > 0) {
-          setSelectedAlbum(data.albums[0]);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load albums:', err);
-    }
-  };
-
-  const handleScan = async () => {
-    if (!selectedDevice) {
-      setError('Please select a scanner device');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setScanInProgress(true);
-    setScanStatusMessage('Connecting to scanner...');
-
-    try {
-      const scanResponse = await scannerApi.scan(
-        selectedDevice.uri,
-        selectedSource
-      );
-
-      if (!scanResponse.success) {
-        throw new Error(scanResponse.error || 'Scan failed');
-      }
-
-      setScanStatusMessage('Processing scanned image...');
-
-      setFullRawScan(scanResponse.image_base64);
-
-      if (scanMode === 'auto-detect') {
-        setScanStatusMessage('Detecting photos...');
-        const detectionResponse = await scannerApi.autoDetect();
-        if (detectionResponse.success && detectionResponse.photos) {
-          const photoObjects = detectionResponse.photos.map((photo) => ({
-            id: photo.id,
-            base64: photo.image_base64,
-            width: photo.width,
-            height: photo.height,
-          }));
-          setPhotos(photoObjects);
-          setSuccess(`Successfully detected ${detectionResponse.photo_count} photos!`);
-        }
-      } else {
-        setSuccess('Scan completed! Ready for manual cropping.');
-        setPhotos([]);
-      }
-    } catch (err) {
-      const detail = err.response?.data?.detail || err.message || 'Failed to scan';
-      if (detail.startsWith('CONNECTION_ISSUE:')) {
-        setError('🔌 Cannot connect to scanner — check power and network connection');
-      } else if (detail.startsWith('SCAN_FAILED:')) {
-        setError('📄 Scan failed — try adjusting settings or restarting the scanner');
-      } else {
-        setError(detail);
-      }
-      console.error(err);
-    } finally {
-      setLoading(false);
-      setScanInProgress(false);
-      setScanStatusMessage('');
-    }
-  };
-
-  const handleSavePhotos = async () => {
-    if (photos.length === 0) {
-      setError('No photos to save');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const {
-        photoAlbumOverrides,
-      } = useScanStore.getState();
-
-      const photoIds = photos.map((_, i) => i);
-      const response = await scannerApi.savePhotos(
-        photoIds,
-        fileFormat,
-        null,
-        immichStatus?.enabled || false,
-        selectedAlbum?.id || null,
-        photoAlbumOverrides
-      );
-
-      if (response.success) {
-        setSuccess(`Saved ${response.saved_count} photos!`);
-        setPhotos([]);
-        setFullRawScan(null);
-        const historyData = await scannerApi.getHistory();
-        if (historyData.photos) {
-          setHistoryPhotos(historyData.photos);
-        }
-      } else {
-        setError(response.error || 'Failed to save photos');
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to save photos');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [serverStatus, immichStatus?.enabled]);
 
   return (
     <div className="control-panel card">
@@ -243,14 +107,6 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
         </div>
       )}
 
-      <button
-        className="btn-primary btn-scan"
-        onClick={handleScan}
-        disabled={!selectedDevice || loading || serverStatus !== 'healthy'}
-      >
-        {loading ? '⏳ Scanning...' : '🚀 Trigger Batch Scan'}
-      </button>
-
       {photos.length > 0 && (
         <>
           <div style={{ borderTop: '1px solid var(--border-light)', margin: '20px 0' }}></div>
@@ -292,28 +148,44 @@ function ControlPanel({ serverStatus, immichStatus, saveMode }) {
               </p>
             </div>
           )}
+        </>
+      )}
 
-          <div className="photo-stats">
-            <span className="stat-label">Photos Ready:</span>
-            <span className="stat-value">{photos.length}</span>
-          </div>
-
+      {showActions && (
+        <>
           <button
-            className="btn-success btn-save"
-            onClick={handleSavePhotos}
-            disabled={loading}
+            className="btn-primary btn-scan"
+            onClick={handleScan}
+            disabled={!selectedDevice || loading || serverStatus !== 'healthy'}
           >
-            {loading ? '💾 Saving...' : '💾 Save Photos'}
+            {loading ? '⏳ Scanning...' : '🚀 Trigger Batch Scan'}
           </button>
 
-          {immichStatus?.enabled && (
-            <p className="immich-note">
-              {saveMode === 'immich_only'
-                ? `✓ Photos will be uploaded to Immich${selectedAlbum ? ` (album: "${selectedAlbum.name}")` : ''}`
-                : immichStatus.healthy
-                  ? `✓ Photos will be saved locally${selectedAlbum ? ` and uploaded to "${selectedAlbum.name}"` : ''}`
-                  : '⚠️ Immich is offline - photos will be saved locally only'}
-            </p>
+          {photos.length > 0 && (
+            <>
+              <div className="photo-stats">
+                <span className="stat-label">Photos Ready:</span>
+                <span className="stat-value">{photos.length}</span>
+              </div>
+
+              <button
+                className="btn-success btn-save"
+                onClick={handleSavePhotos}
+                disabled={loading}
+              >
+                {loading ? '💾 Saving...' : '💾 Save Photos'}
+              </button>
+
+              {immichStatus?.enabled && (
+                <p className="immich-note">
+                  {saveMode === 'immich_only'
+                    ? `✓ Photos will be uploaded to Immich${selectedAlbum ? ` (album: "${selectedAlbum.name}")` : ''}`
+                    : immichStatus.healthy
+                      ? `✓ Photos will be saved locally${selectedAlbum ? ` and uploaded to "${selectedAlbum.name}"` : ''}`
+                      : '⚠️ Immich is offline - photos will be saved locally only'}
+                </p>
+              )}
+            </>
           )}
         </>
       )}

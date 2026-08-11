@@ -219,8 +219,34 @@
   font-size: 1.8rem;
 }
 
-.edit-meta-btn {
-  width: 100%;
-  margin-bottom: 10px;
-  font-weight: 600;
+/* --- Shimmer while transforming --- */
+.photo-image-container.shimmering img {
+  opacity: 0.6;
+}
+
+.shimmer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 20%,
+    var(--shimmer-highlight, rgba(255, 255, 255, 0.35)) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
 }

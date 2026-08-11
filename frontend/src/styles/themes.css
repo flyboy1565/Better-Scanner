@@ -41,6 +41,7 @@
   --spinner-bg: #f3f3f3;
   --spinner-accent: #0066cc;
   --checkbox-accent: #0066cc;
+  --shimmer-highlight: rgba(255, 255, 255, 0.45);
 }
 
 [data-theme="night-blue"] {
@@ -85,6 +86,7 @@
   --spinner-bg: #30363d;
   --spinner-accent: #58a6ff;
   --checkbox-accent: #58a6ff;
+  --shimmer-highlight: rgba(255, 255, 255, 0.2);
 }
 
 [data-theme="red-black"] {
@@ -129,6 +131,7 @@
   --spinner-bg: #2a2a2a;
   --spinner-accent: #ff4444;
   --checkbox-accent: #ff4444;
+  --shimmer-highlight: rgba(255, 255, 255, 0.2);
 }
 
 [data-theme="green-black"] {
@@ -173,6 +176,7 @@
   --spinner-bg: #2a2a2a;
   --spinner-accent: #44cc44;
   --checkbox-accent: #44cc44;
+  --shimmer-highlight: rgba(255, 255, 255, 0.2);
 }
 
 [data-theme="purple-light"] {
@@ -217,6 +221,7 @@
   --spinner-bg: #f3f3f3;
   --spinner-accent: #7b2ff5;
   --checkbox-accent: #7b2ff5;
+  --shimmer-highlight: rgba(255, 255, 255, 0.45);
 }
 
 [data-theme="purple-dark"] {
@@ -261,4 +266,5 @@
   --spinner-bg: #2a2a45;
   --spinner-accent: #9966ff;
   --checkbox-accent: #9966ff;
+  --shimmer-highlight: rgba(255, 255, 255, 0.2);
 }

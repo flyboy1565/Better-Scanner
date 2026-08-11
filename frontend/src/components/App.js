@@ -5,6 +5,8 @@ import ControlPanel from './ControlPanel';
 import ImageGallery from './ImageGallery';
 import CropCanvas from './CropCanvas';
 import ThemeSwitcher from './ThemeSwitcher';
+import MobileActionBar from './MobileActionBar';
+import { useMobile } from '../hooks/useMediaQuery';
 import '../styles/index.css';
 import './App.css';
 
@@ -14,15 +16,18 @@ function App() {
     historyPhotos,
     fullRawScan,
     scanMode,
-    setScanMode,
     clearSession,
     setHistoryPhotos,
     scanInProgress,
     scanStatusMessage,
     theme,
-    setTheme,
+    setImmichEnabled,
+    fetchDevices,
+    fetchAlbums,
   } = useScanStore();
 
+  const isMobile = useMobile();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [serverStatus, setServerStatus] = useState('connecting');
   const [immichStatus, setImmichStatus] = useState(null);
   const [saveMode, setSaveMode] = useState('both');
@@ -58,9 +63,13 @@ function App() {
         try {
           const status = await scannerApi.checkImmichHealth();
           setImmichStatus(status);
+          setImmichEnabled(!!status.enabled);
         } catch (error) {
           console.warn('Immich health check failed:', error);
         }
+
+        fetchDevices();
+        fetchAlbums();
       } catch (error) {
         setServerStatus('error');
         console.error('Server health check failed:', error);
@@ -94,13 +103,21 @@ function App() {
             )}
           </div>
           <div className="flex items-center gap-4">
+            {isMobile && (
+              <button
+                className="btn-secondary settings-btn"
+                onClick={() => setSettingsOpen(true)}
+              >
+                ⚙️
+              </button>
+            )}
             <ThemeSwitcher />
           </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="app-main">
+      <main className={`app-main${isMobile ? ' app-main-mobile' : ''}`}>
         <div className="container">
           {serverStatus === 'error' && (
             <div className="status status-error">
@@ -111,14 +128,16 @@ function App() {
 
           {/* Main content grid */}
           <div className="content-grid">
-            {/* Left panel - Control Panel */}
-            <aside className="control-sidebar">
-              <ControlPanel
-                serverStatus={serverStatus}
-                immichStatus={immichStatus}
-                saveMode={saveMode}
-              />
-            </aside>
+            {/* Left panel - Control Panel (hidden on mobile, shown in modal) */}
+            {!isMobile && (
+              <aside className="control-sidebar">
+                <ControlPanel
+                  serverStatus={serverStatus}
+                  immichStatus={immichStatus}
+                  saveMode={saveMode}
+                />
+              </aside>
+            )}
 
             {/* Right panel - Content Area */}
             <section className="content-area">
@@ -187,6 +206,29 @@ function App() {
           </div>
         </div>
       </main>
+
+      {/* Mobile: settings modal */}
+      {isMobile && settingsOpen && (
+        <div className="modal-overlay mobile-settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="mobile-settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Settings</h3>
+              <button className="modal-close-btn" onClick={() => setSettingsOpen(false)}>✕</button>
+            </div>
+            <div className="mobile-settings-body">
+              <ControlPanel
+                serverStatus={serverStatus}
+                immichStatus={immichStatus}
+                saveMode={saveMode}
+                showActions={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile: fixed action bar */}
+      {isMobile && <MobileActionBar serverStatus={serverStatus} />}
     </div>
   );
 }

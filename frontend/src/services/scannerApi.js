@@ -57,13 +57,10 @@ export const scannerApi = {
 
   // Save photos to disk and optionally upload to Immich
   savePhotos: async (
-    photoIds, 
-    fileFormat, 
-    customNames = {}, 
-    uploadToImmich = false, 
-    defaultAlbumId = null, 
-    photoAlbumOverrides = {},
-    photoDescriptions = {} // ✨ Match parameter signature 
+    photoIds,
+    fileFormat,
+    uploadToImmich = false,
+    defaultAlbumId = null
   ) => {
     const response = await fetch(`${API_URL}/api/save`, {
       method: 'POST',
@@ -75,9 +72,6 @@ export const scannerApi = {
         file_format: fileFormat,
         upload_to_immich: uploadToImmich,
         default_album_id: defaultAlbumId,
-        custom_names: customNames,
-        photo_descriptions: photoDescriptions, // ✨ Maps straight to our backend schema key!
-        photo_album_overrides: photoAlbumOverrides,
       }),
     });
     return response.json();
