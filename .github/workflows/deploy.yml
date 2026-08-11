@@ -49,6 +49,11 @@ jobs:
 
       - name: Smoke test
         run: |
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8082/health && break
+            echo "waiting for backend... ($i)"
+            sleep 2
+          done
           set -e
           curl -fsS http://127.0.0.1:8082/health | grep -q healthy
           curl -fsS http://127.0.0.1:8082/config | grep -q immich_only
