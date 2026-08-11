@@ -49,6 +49,20 @@ export const scannerApi = {
     return response.data;
   },
 
+  // Apply classical restoration (non-destructive preview; returns the fixed image)
+  fix: async (photoId, mode = 'auto') => {
+    const response = await api.post(`/api/fix/${photoId}`, { mode });
+    return response.data;
+  },
+
+  // Commit a given image (base64) as the session photo for photoId
+  applyPhoto: async (photoId, imageBase64) => {
+    const response = await api.post(`/api/photo/${photoId}/apply`, {
+      image_base64: imageBase64,
+    });
+    return response.data;
+  },
+
   // Delete a photo
   deletePhoto: async (photoId) => {
     const response = await api.delete(`/api/photo/${photoId}`);

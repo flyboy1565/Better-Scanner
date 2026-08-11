@@ -86,3 +86,109 @@ class ImageProcessor:
         if flip_v:
             image = ImageProcessor.flip_vertical(image)
         return image
+
+    @staticmethod
+    def fix_photo(image: Image.Image, mode: str = "auto") -> Image.Image:
+        """
+        Apply classical (non-AI) automatic restoration to a photo.
+
+        Modes:
+          - "auto": full pipeline (scratch repair + sharpen + color correction)
+          - "scratch": remove small scratches/dust via inpainting
+          - "enhance": denoise + sharpen detail
+          - "color": correct faded color casts and boost contrast
+        """
+        image = ImageProcessor._fix_steps(image, mode)
+        return image
+
+    @staticmethod
+    def _fix_steps(image: Image.Image, mode: str) -> Image.Image:
+        """Helper that runs whichever sub-fixes the mode requests."""
+        do_scratch = mode in ("auto", "scratch")
+        do_enhance = mode in ("auto", "enhance")
+        do_color = mode in ("auto", "color")
+
+        img = image.convert("RGB")
+        bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+        if do_scratch:
+            bgr = ImageProcessor._remove_scratches(bgr)
+
+        if do_color:
+            bgr = ImageProcessor._color_correct(bgr)
+
+        if do_enhance:
+            bgr = ImageProcessor._enhance_detail(bgr)
+
+        pil = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+
+        # Re-apply original alpha if the source had transparency (e.g. PNG crops)
+        if image.mode == "RGBA":
+            pil = pil.convert("RGBA")
+            pil.putalpha(image.getchannel("A"))
+        elif image.mode == "P":
+            pil = pil.convert("RGB")
+
+        return pil
+
+    @staticmethod
+    def _color_correct(bgr: np.ndarray) -> np.ndarray:
+        """Gray-world white balance plus CLAHE contrast boost on the L channel."""
+        b, g, r = cv2.split(bgr)
+
+        # Gray-world white balance: scale channels so their means are equal.
+        means = [float(ch.mean()) for ch in (b, g, r)]
+        mean_all = sum(means) / 3.0 if means else 128.0
+        scale_b = mean_all / means[0] if means[0] > 0 else 1.0
+        scale_g = mean_all / means[1] if means[1] > 0 else 1.0
+        scale_r = mean_all / means[2] if means[2] > 0 else 1.0
+
+        b = np.clip(b.astype(np.float32) * scale_b, 0, 255).astype(np.uint8)
+        g = np.clip(g.astype(np.float32) * scale_g, 0, 255).astype(np.uint8)
+        r = np.clip(r.astype(np.float32) * scale_r, 0, 255).astype(np.uint8)
+
+        balanced = cv2.merge([b, g, r])
+
+        # CLAHE on the L channel of LAB to lift faded contrast without over-boosting color.
+        lab = cv2.cvtColor(balanced, cv2.COLOR_BGR2LAB)
+        l, a, ch_b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        lab = cv2.merge([l, a, ch_b])
+
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+    @staticmethod
+    def _enhance_detail(bgr: np.ndarray) -> np.ndarray:
+        """Gently smooth noise, then apply an unsharp mask for detail."""
+        smoothed = cv2.bilateralFilter(bgr, d=5, sigmaColor=24, sigmaSpace=24)
+
+        blurred = cv2.GaussianBlur(smoothed, (0, 0), 1.4)
+        unsharp = cv2.addWeighted(smoothed, 1.5, blurred, -0.5, 0)
+
+        return unsharp
+
+    @staticmethod
+    def _remove_scratches(bgr: np.ndarray) -> np.ndarray:
+        """
+        Detect thin bright/dark scratch lines via morphological top-hat and
+        black-hat, then inpaint them with Telea's method.
+        """
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        top_hat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
+        black_hat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+
+        combined = cv2.max(top_hat, black_hat)
+
+        _, mask = cv2.threshold(combined, 18, 255, cv2.THRESH_BINARY)
+
+        # Slightly dilate the scratches so inpainting covers the damaged edge.
+        dilate_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        mask = cv2.dilate(mask, dilate_kernel, iterations=1)
+
+        if cv2.countNonZero(mask) == 0:
+            return bgr
+
+        return cv2.inpaint(bgr, mask, 3, cv2.INPAINT_TELEA)

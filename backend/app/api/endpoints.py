@@ -15,6 +15,8 @@ from app.models.schemas import (
     SaveResponse,
     CropRequest,
     PhotoExtract,
+    FixRequest,
+    PhotoApplyRequest,
 )
 from app.services.scanner import ScannerService
 from app.services.image_processor import ImageProcessor
@@ -182,6 +184,56 @@ async def transform_photo(photo_id: int, rotation: int = 0, flip_h: bool = False
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transform failed: {str(e)}")
+
+
+@router.post("/fix/{photo_id}")
+async def fix_photo(photo_id: int, request: FixRequest = None):
+    """
+    Compute a classical restoration (scratch repair, sharpen, color) of a photo.
+    Non-destructive: returns the fixed preview WITHOUT modifying the session.
+    Call POST /api/photo/{photo_id}/apply to commit whichever version you keep.
+    """
+    if photo_id >= len(current_session["photos"]):
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    try:
+        photo = current_session["photos"][photo_id]
+        fixed = ImageProcessor.fix_photo(photo, request.mode if request else "auto")
+
+        return {
+            "success": True,
+            "photo": {
+                "id": photo_id,
+                "width": fixed.width,
+                "height": fixed.height,
+                "image_base64": image_to_base64(fixed),
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fix failed: {str(e)}")
+
+
+@router.post("/photo/{photo_id}/apply")
+async def apply_photo(photo_id: int, request: PhotoApplyRequest):
+    """Commit an image (base64) as the given session photo."""
+    if photo_id >= len(current_session["photos"]):
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    try:
+        img = base64_to_image(request.image_base64)
+        current_session["photos"][photo_id] = img
+
+        return {
+            "success": True,
+            "photo": {
+                "id": photo_id,
+                "width": img.width,
+                "height": img.height,
+                "image_base64": request.image_base64,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Apply failed: {str(e)}")
 
 
 @router.delete("/photo/{photo_id}")

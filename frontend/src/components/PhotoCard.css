@@ -102,6 +102,88 @@
   gap: 4px;
 }
 
+/* Auto-restore ("Fix") button spans the full transform grid */
+.btn-fix {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  font-weight: 600;
+  background-color: #28a745;
+  color: white;
+}
+
+.btn-fix:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.btn-fix:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* --- Fix before/after comparison modal --- */
+.fix-modal {
+  max-width: 860px;
+  width: 95%;
+}
+
+.fix-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fix-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fix-panel img {
+  width: 100%;
+  height: auto;
+  max-height: 55vh;
+  object-fit: contain;
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: var(--bg-tertiary, #000);
+}
+
+.fix-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.fix-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-fix.modal {
+  grid-column: auto;
+  margin-top: 0;
+}
+
+@media (max-width: 480px) {
+  .fix-compare {
+    grid-template-columns: 1fr;
+  }
+  .fix-panel img {
+    max-height: 35vh;
+  }
+  .fix-actions {
+    flex-direction: column;
+  }
+  .fix-actions button {
+    width: 100%;
+  }
+}
+
 /* --- Modal Layout Architecture --- */
 .modal-overlay {
   position: fixed;

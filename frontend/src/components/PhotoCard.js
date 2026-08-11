@@ -40,6 +40,49 @@ function LightboxModal({ isOpen, onClose, imgSrc, altText }) {
   );
 }
 
+// Modal showing original vs fixed version (choose one to keep)
+function FixModal({ isOpen, onClose, beforeSrc, afterSrc, onKeepOriginal, onKeepFixed, working }) {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay" onClick={!working ? onClose : undefined}>
+      <div className="modal-content fix-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>✨ Fix Photo</h3>
+          <button className="modal-close-btn" onClick={onClose} disabled={working}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="fix-compare">
+            <div className="fix-panel">
+              <div className="fix-label">Original</div>
+              <img src={beforeSrc} alt="Original" />
+            </div>
+            <div className="fix-panel">
+              <div className="fix-label">Fixed</div>
+              <img src={afterSrc} alt="Fixed" className="fix-after-image" />
+            </div>
+          </div>
+          <div className="fix-actions">
+            <button
+              className="btn-sm btn-secondary"
+              onClick={onKeepOriginal}
+              disabled={working}
+            >
+              Keep Original
+            </button>
+            <button
+              className="btn-sm btn-fix modal"
+              onClick={onKeepFixed}
+              disabled={working}
+            >
+              {working ? 'Applying...' : 'Keep Fixed'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PhotoCard({ photo, index }) {
   const { updatePhoto, deletePhoto } = useScanStore();
 
@@ -47,14 +90,19 @@ function PhotoCard({ photo, index }) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
+  const [isFixOpen, setIsFixOpen] = useState(false);
+  const [fixBeforeSrc, setFixBeforeSrc] = useState(null);
+  const [fixAfterSrc, setFixAfterSrc] = useState(null);
+  const [fixWorking, setFixWorking] = useState(false);
+
   const [transforming, setTransforming] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleTransform = async (rotation, flipH = false, flipV = false) => {
+  const handleTransform = async (rotation) => {
     setTransforming(true);
     setError(null);
     try {
-      const response = await scannerApi.transform(index, rotation, flipH, flipV);
+      const response = await scannerApi.transform(index, rotation);
       if (response.success && response.photo) {
         updatePhoto(index, {
           ...photo,
@@ -68,6 +116,51 @@ function PhotoCard({ photo, index }) {
       console.error(err);
     } finally {
       setTransforming(false);
+    }
+  };
+
+  const handleFix = async () => {
+    setTransforming(true);
+    setError(null);
+    try {
+      const response = await scannerApi.fix(index, 'auto');
+      if (response.success && response.photo) {
+        setFixBeforeSrc(photo.base64);
+        setFixAfterSrc(response.photo.image_base64);
+        setIsFixOpen(true);
+      }
+    } catch (err) {
+      setError('Fix failed');
+      console.error(err);
+    } finally {
+      setTransforming(false);
+    }
+  };
+
+  const handleKeepOriginal = () => {
+    setIsFixOpen(false);
+    setFixBeforeSrc(null);
+    setFixAfterSrc(null);
+  };
+
+  const handleKeepFixed = async () => {
+    if (!fixAfterSrc) return;
+    setFixWorking(true);
+    setError(null);
+    try {
+      await scannerApi.applyPhoto(index, fixAfterSrc);
+      updatePhoto(index, {
+        ...photo,
+        base64: fixAfterSrc,
+      });
+      setIsFixOpen(false);
+      setFixBeforeSrc(null);
+      setFixAfterSrc(null);
+    } catch (err) {
+      setError('Apply failed');
+      console.error(err);
+    } finally {
+      setFixWorking(false);
     }
   };
 
@@ -107,7 +200,7 @@ function PhotoCard({ photo, index }) {
       </div>
 
       <div className="photo-controls">
-        {/* Row 1: Always Visible Transformations */}
+        {/* Row 1: Transformations + Fix */}
         <div className="control-group">
           <label className="label">Transformations:</label>
           <div className="button-grid">
@@ -128,20 +221,12 @@ function PhotoCard({ photo, index }) {
               🔄 Right
             </button>
             <button
-              className="btn-sm btn-secondary"
-              onClick={() => handleTransform(0, true)}
+              className="btn-sm btn-fix"
+              onClick={handleFix}
               disabled={transforming}
-              title="Flip horizontally"
+              title="Auto-restore: remove scratches, sharpen, correct color"
             >
-              ↔️ Flip H
-            </button>
-            <button
-              className="btn-sm btn-secondary"
-              onClick={() => handleTransform(0, false, true)}
-              disabled={transforming}
-              title="Flip vertically"
-            >
-              ↕️ Flip V
+              ✨ Fix
             </button>
           </div>
         </div>
@@ -166,6 +251,17 @@ function PhotoCard({ photo, index }) {
         onClose={() => setIsLightboxOpen(false)}
         imgSrc={imageSrc}
         altText={`Full size extract ${index + 1}`}
+      />
+
+      {/* Fix: before/after comparison */}
+      <FixModal
+        isOpen={isFixOpen}
+        onClose={handleKeepOriginal}
+        beforeSrc={fixBeforeSrc ? `data:image/png;base64,${fixBeforeSrc}` : ''}
+        afterSrc={fixAfterSrc ? `data:image/png;base64,${fixAfterSrc}` : ''}
+        onKeepOriginal={handleKeepOriginal}
+        onKeepFixed={handleKeepFixed}
+        working={fixWorking}
       />
 
       {/* Delete Confirmation Modal */}

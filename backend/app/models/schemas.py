@@ -74,3 +74,11 @@ class ImageTransform(BaseModel):
     rotation: int = 0  # 0, 90, -90, 180
     flip_h: bool = False
     flip_v: bool = False
+
+
+class FixRequest(BaseModel):
+    mode: str = "auto"  # "auto", "scratch", "enhance", "color"
+
+
+class PhotoApplyRequest(BaseModel):
+    image_base64: str
