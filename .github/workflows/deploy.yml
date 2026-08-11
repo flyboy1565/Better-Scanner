@@ -11,7 +11,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Sync repo into deploy dir
         run: |
@@ -25,7 +25,7 @@ jobs:
             ./ "$HOME/projects/better-scanner/"
 
       - name: Validate compose config
-        working-directory: ~/projects/better-scanner
+        working-directory: $HOME/projects/better-scanner
         env:
           IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
         run: docker compose -f docker-compose.server.yml config > /dev/null
@@ -40,7 +40,7 @@ jobs:
             sh -c "npm ci && npm run build"
 
       - name: Deploy stack
-        working-directory: ~/projects/better-scanner
+        working-directory: $HOME/projects/better-scanner
         env:
           IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
         run: docker compose -f docker-compose.server.yml up -d --build
