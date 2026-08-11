@@ -2,45 +2,52 @@
 
 ## Current Task: Server Deployment + Upload-Only Mode
 
-### CI/CD Plan (Phase 1 = in progress)
+### CI/CD Status: LIVE ✅ (Phases 1-3 done)
 
 **Decision:** GitHub Actions + self-hosted runner on `holfam`. Repo already lives on GitHub (public, default `main`, deploy branch `server-deployment`). Server is internet-connected, so the runner (which polls GitHub outbound) works fine; the scanner stays LAN-only because all deploy steps run on `holfam` itself.
 
 - Deploy trigger: **auto-deploy on push to `server-deployment`**
 - Secrets: **GitHub Actions secrets** → injected at deploy time (Immich key never lives in repo or a stale server `.env`)
+- Last verified: full run green (checkout → sync → validate → build → deploy → smoke test all success)
 
-#### Phase 1 (in progress) — Repo foundation
-1. Record this plan in `AGENTS.md`
-2. Commit + push current `server-deployment` work (scanner fields in config, nginx brace fix, frontend API-URL fix, compose rewrite)
-3. Restructure env handling:
+#### Phase 1 ✅ — Repo foundation
+1. Recorded plan in `AGENTS.md`
+2. Committed + pushed `server-deployment` work (scanner fields in config, nginx brace fix, frontend API-URL fix, compose rewrite)
+3. Restructured env handling:
    - Non-secret values (scanner IPs, SAVE_MODE, URLs, ports) → inline in `docker-compose.server.yml` `environment:`
    - `IMMICH_API_KEY` → `${IMMICH_API_KEY:?}` in compose, provided by CI
-   - Remove stale server `backend/.env` (gitignored) so the key isn't live outside the secret store
+   - Removed stale server `backend/.env` (gitignored) so the key isn't live outside the secret store
+   - Added `.dockerignore` to prevent server `backend/.env` / build artifacts leaking into image layers
 
-#### Phase 2 — Workflow file
-- `.github/workflows/deploy.yml`: trigger `push` to `server-deployment` only, `runs-on: self-hosted` (label `holfam`)
+#### Phase 2 ✅ — Workflow file
+- `.github/workflows/deploy.yml`: trigger `push` to `server-deployment` only, `runs-on: self-hosted` (matches `self-hosted` label — runner registered with extra label `better-scanner`)
 - Steps (all run on holfam):
-  1. `actions/checkout@v4`
-  2. `docker compose -f docker-compose.server.yml config` (early validation)
-  3. `cd frontend && npm ci && REACT_APP_API_URL= npm run build` (same-origin relative API)
-  4. Inject secrets → compose environment
-  5. `docker compose -f docker-compose.server.yml up -d --build`
-  6. Smoke test: curl `/health`, `/config`, `/api/devices` on `127.0.0.1:8082`; fail job if unhealthy
+  1. `actions/checkout@v5`
+  2. `rsync -az --delete` repo into `$HOME/projects/better-scanner` (excludes `.git`, `frontend/node_modules`, `frontend/build`, `scans`, `.env`, `backend/.env`)
+  3. `docker compose -f docker-compose.server.yml config` (early validation; needs `IMMICH_API_KEY` even for validation)
+  4. Build frontend in `node:20-alpine` container: `npm ci && REACT_APP_API_URL= npm run build` (same-origin relative API; docker run works, nginx bind-mounts `frontend/build`)
+  5. `docker compose -f docker-compose.server.yml up -d --build` (with `IMMICH_API_KEY` secret env)
+  6. Smoke test: curl `/health`, `/config`, `/api/devices` on `127.0.0.1:8082` with 30x2s readiness retry; fail job if unhealthy
 
-#### Phase 3 — Self-hosted runner on `holfam`
-- Register runner (label `holfam`) in repo Settings → Actions → Runners, run as `flyboy1565`
-- systemd service (`./svc.sh install && ./svc.sh start`) for persistence
+#### Phase 3 ✅ — Self-hosted runner on `holfam`
+- Registered runner (name `holfammedia`, labels `self-hosted`, `Linux`, `X64`, `better-scanner`) running as `flyboy1565`, installed at `~/actions-runner`
+- systemd service `actions.runner.flyboy1565-Better-Scanner.holfammedia.service` (via `sudo ./svc.sh install` + `sudo ./svc.sh start`, enabled at boot)
 - Restrict: no `pull_request` triggers (fork PRs = arbitrary code on server). Use GH "approve workflow runs from outside collaborators" for self-hosted.
 
-#### Phase 4 — Cutover
-- Remove legacy rsync/scp deploy path and stale server `backend/.env`
+#### Phase 4 — Cutover (only remaining)
+- Legacy rsync/scp manual deploy path: **kept as fallback** alongside CI ✅ decided (no action needed)
 - Rollback = push/revert a commit to `server-deployment`
 - Optional future: migrate to Gitea if de-GitHubing (workflow YAML nearly portable)
 
-### Open Decisions (needed before Phases 2-4)
-- Checkout dir: **current `~/projects/better-scanner`** (stable project name/network) ✅ decided
-- Repo stays **public** on GitHub ✅ decided
-- Legacy rsync/scp manual deploy path: **kept as fallback** alongside CI ✅ decided
+### CI/CD gotchas learned (do NOT regress)
+- **`working-directory` does NOT expand `~` or `$HOME`** — it's used literally as a path relative to the workspace. Use `cd "$HOME/..."` inside `run:` instead (bash does expand `$HOME` there).
+- `actions/checkout@v4` targets deprecated Node 20 → use `@v5`.
+- **`docker compose ... config` fails on `${IMMICH_API_KEY:?}`** if the secret isn't exported for that step — need `env: IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}` on the validate step, not just deploy.
+- Self-hosted runner checks out into `_work/Better-Scanner/Better-Scanner` (NOT `~/projects/better-scanner`), which is not a git repo — hence the rsync copy step that keeps compose project name/network (`better-scanner_default`) stable.
+- `rsync --delete` fails (exit 23) if dest has root-owned files: frontend build written by a `node:20-alpine` container (running as root) created root-owned `frontend/build` — exclude it from rsync deletes (it's regenerated each deploy).
+- The frontend `package-lock.json` had `typescript@6.0.3` but `npm ci` required `4.9.5` — fixed by `npm install` with the pinned version and (importantly) ran `npm ci && npm run build` once inside `node:20-alpine` on the server to regenerate it with the exact npm version CI uses (local npm 11 vs container npm 10 disagree otherwise).
+- Smoke test running immediately after `up -d` can hit a not-yet-served backend → add readiness retry loop.
+- GitHub Actions secrets: only set through **repo Settings → Secrets → Actions** (`IMMICH_API_KEY`); a failed run does NOT re-run automatically when the secret is added later — click "Re-run failed jobs" or push a trivial commit.
 
 ### Branch
 `server-deployment`
@@ -78,11 +85,10 @@
 15. **`.env`** — Added `SCANNER_IPS=192.168.68.61 192.168.68.64` for local EPSON scanners
 16. **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
 
-### To Deploy on Server (current, pre-CI)
+### To Deploy on Server (via CI — new default)
 
-1. From the repo root, run with the secret in the environment:
-   `IMMICH_API_KEY=... docker compose -f docker-compose.server.yml up -d --build`
-2. `docker-compose.server.yml` has all non-secret config inline in `environment:`; only the key comes from the env var (`${IMMICH_API_KEY:?}`)
+1. Auto-deploys on push to `server-deployment` via the self-hosted runner on `holfam` (see `.github/workflows/deploy.yml`).
+2. Manual fallback (pre-CI, still works): from the repo root, `IMMICH_API_KEY=... docker compose -f docker-compose.server.yml up -d --build`
 3. Access on LAN: `http://192.168.68.62:8082` (nginx bound to host port 8082; 80/443 owned by nginx-proxy-manager)
 4. Servers alive on `holfam`:
    - `better-scanner-backend` / `better-scanner-nginx` (containers)
@@ -153,7 +159,7 @@ Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 sha
 - **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, configures `airscan.conf` from `SCANNER_IP`/`SCANNER_IPS` env vars (URL format: `https://$IP/eSCL`)
 - **`docker-compose.yml`** — Added `SCANNER_IP`/`SCANNER_IPS` env vars, reverted port mapping (host networking broke WSL2 port forwarding)
 - **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
-- **`.env`** — Added `SCANNER_IPS=192.168.68.67 192.168.68.61` for local EPSON scanners
+- **`.env`** — Added `SCANNER_IPS=192.168.68.61 192.168.68.64` for local EPSON scanners
 - **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
 
 ## Other findings (not yet addressed)
