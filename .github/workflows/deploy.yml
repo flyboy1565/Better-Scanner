@@ -25,10 +25,11 @@ jobs:
             ./ "$HOME/projects/better-scanner/"
 
       - name: Validate compose config
-        working-directory: $HOME/projects/better-scanner
         env:
           IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
-        run: docker compose -f docker-compose.server.yml config > /dev/null
+        run: |
+          cd "$HOME/projects/better-scanner"
+          docker compose -f docker-compose.server.yml config > /dev/null
 
       - name: Build frontend
         run: |
@@ -40,10 +41,11 @@ jobs:
             sh -c "npm ci && npm run build"
 
       - name: Deploy stack
-        working-directory: $HOME/projects/better-scanner
         env:
           IMMICH_API_KEY: ${{ secrets.IMMICH_API_KEY }}
-        run: docker compose -f docker-compose.server.yml up -d --build
+        run: |
+          cd "$HOME/projects/better-scanner"
+          docker compose -f docker-compose.server.yml up -d --build
 
       - name: Smoke test
         run: |
