@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 import os
 import logging
 from pathlib import Path
@@ -36,6 +37,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Include routers
 app.include_router(router)
+
+# Serve debug output (auto-detect extraction files) for inspection/tuning.
+_DEBUG_DIR = Path("/tmp/debug")
+if _DEBUG_DIR.exists():
+    app.mount("/debug", StaticFiles(directory=str(_DEBUG_DIR)), name="debug")
 
 
 @app.on_event("startup")

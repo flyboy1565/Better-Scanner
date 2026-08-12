@@ -4,6 +4,7 @@ import base64
 import os
 import datetime
 import logging
+import shutil
 from PIL import Image
 from io import BytesIO
 from typing import List, Optional
@@ -105,8 +106,27 @@ async def auto_detect_photos():
         raise HTTPException(status_code=400, detail="No scan in session. Trigger a scan first.")
 
     try:
-        photos = ImageProcessor.split_multi_photo_scan(current_session["full_raw_scan_path"])
+        raw_path = current_session["full_raw_scan_path"]
+
+        debug_dir = None
+        try:
+            debug_dir = os.path.join(
+                "/tmp/debug",
+                f"scan_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            )
+            os.makedirs(debug_dir, exist_ok=True)
+            # Keep a copy of the full raw scan for reference.
+            raw_copy = os.path.join(debug_dir, "raw_scan" + os.path.splitext(raw_path)[1])
+            shutil.copy2(raw_path, raw_copy)
+        except Exception as e:
+            logger.warning(f"Could not set up debug dir: {e}")
+            debug_dir = None
+
+        photos = ImageProcessor.split_multi_photo_scan(raw_path, debug_dir=debug_dir)
         current_session["photos"] = photos
+
+        if debug_dir:
+            logger.info(f"Debug extracts written to {debug_dir}")
 
         return {
             "success": True,
@@ -120,6 +140,7 @@ async def auto_detect_photos():
                 }
                 for i, photo in enumerate(photos)
             ],
+            "debug_dir": debug_dir,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Auto-detect failed: {str(e)}")

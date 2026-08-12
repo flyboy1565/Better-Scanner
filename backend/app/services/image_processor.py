@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import os
 from PIL import Image, ImageOps
 from typing import List, Tuple
 
@@ -8,23 +9,32 @@ class ImageProcessor:
     """Handles image processing: auto-detection, cropping, transformations"""
 
     @staticmethod
-    def split_multi_photo_scan(image_path: str) -> List[Image.Image]:
+    def split_multi_photo_scan(image_path: str, debug_dir: str = None) -> List[Image.Image]:
         """
         Auto-detect multiple photos in a scan and split them.
         Based on contour detection and area analysis.
+
+        If debug_dir is provided, writes each detected photo to disk as
+        extract_<n>_contour.png (before border removal) and extract_<n>_final.png
+        (after border removal), where <n> matches the returned list index / UI
+        order, for inspection and tuning.
         """
         img = cv2.imread(image_path)
         if img is None:
             return []
 
+        if debug_dir:
+            os.makedirs(debug_dir, exist_ok=True)
+
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (11, 11), 0)
+
         _, thresh = cv2.threshold(blurred, 225, 255, cv2.THRESH_BINARY_INV)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        extracted_images = []
+        extracted_pairs = []  # (contour_img, final_img) in contour order
         shave_pixels = 24
 
         for cnt in contours:
@@ -42,10 +52,18 @@ class ImageProcessor:
                         cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
                         pil_img = Image.fromarray(cropped_rgb)
                         pil_img = pil_img.rotate(180, expand=True)
-                        pil_img = ImageProcessor.remove_polaroid_border(pil_img)
-                        extracted_images.append(pil_img)
+                        final_img = ImageProcessor.remove_polaroid_border(pil_img)
+                        extracted_pairs.append((pil_img, final_img))
 
-        return list(reversed(extracted_images))
+        # Reverse so the returned order matches the UI's Extract #0, #1, ...
+        extracted_pairs.reverse()
+
+        if debug_dir:
+            for n, (contour_img, final_img) in enumerate(extracted_pairs):
+                contour_img.save(os.path.join(debug_dir, f"extract_{n}_contour.png"))
+                final_img.save(os.path.join(debug_dir, f"extract_{n}_final.png"))
+
+        return [final for _, final in extracted_pairs]
 
     @staticmethod
     def crop_image(image: Image.Image, x1: int, y1: int, x2: int, y2: int) -> Image.Image:
@@ -63,65 +81,56 @@ class ImageProcessor:
     @staticmethod
     def remove_polaroid_border(
         image: Image.Image,
-        border_tolerance: int = 18,
+        bright_threshold: int = 200,
+        uniform_threshold: float = 15.0,
         min_border_px: int = 10,
+        min_sides: int = 2,
+        max_fraction: float = 0.3,
     ) -> Image.Image:
         """
         Trim a uniform near-white (classic Polaroid) frame from a photo.
 
-        The frame is detected by sampling the corner color and walking inward
-        from each edge while the row/column mean stays close to that border
-        color. Only strips if ALL four sides have at least `min_border_px` of
-        uniform border (so ordinary borderless photos are not over-trimmed).
+        Each edge is walked inward while its row/column mean is bright
+        (>= bright_threshold) AND uniform (std <= uniform_threshold). A side
+        "has a frame" if that run is at least `min_border_px` thick. To avoid
+        over-trimming ordinary borderless photos, the crop is only applied when
+        at least `min_sides` sides have a frame. Each side is capped at
+        `max_fraction` of the image dimension so a near-white photo edge can't
+        be removed entirely.
         """
         rgb = image.convert("RGB")
         gray = cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2GRAY)
         h, w = gray.shape
 
-        # Estimate the border color from the four corners.
-        corner = np.concatenate(
-            [
-                gray[:10, :10].ravel(),
-                gray[:10, -10:].ravel(),
-                gray[-10:, :10].ravel(),
-                gray[-10:, -10:].ravel(),
-            ]
-        )
-        border_val = float(np.median(corner))
-
-        # A classic Polaroid frame is near-white / cream.
-        if border_val < 200:
-            return image
+        def frame_width(profile_mean, profile_std):
+            n = 0
+            for m, s in zip(profile_mean, profile_std):
+                if m < bright_threshold or s > uniform_threshold:
+                    break
+                n += 1
+            return n
 
         row_mean = gray.mean(axis=1)
+        row_std = gray.std(axis=1)
         col_mean = gray.mean(axis=0)
+        col_std = gray.std(axis=0)
 
-        top = 0
-        while top < h and abs(row_mean[top] - border_val) < border_tolerance:
-            top += 1
+        top = frame_width(row_mean, row_std)
+        bottom = frame_width(row_mean[::-1], row_std[::-1])
+        left = frame_width(col_mean, col_std)
+        right = frame_width(col_mean[::-1], col_std[::-1])
 
-        bottom = h
-        while bottom > top and abs(row_mean[bottom - 1] - border_val) < border_tolerance:
-            bottom -= 1
+        # Cap each trim so a uniformly bright photo isn't cut away.
+        top = min(top, int(h * max_fraction))
+        bottom = min(bottom, int(h * max_fraction))
+        left = min(left, int(w * max_fraction))
+        right = min(right, int(w * max_fraction))
 
-        left = 0
-        while left < w and abs(col_mean[left] - border_val) < border_tolerance:
-            left += 1
-
-        right = w
-        while right > left and abs(col_mean[right - 1] - border_val) < border_tolerance:
-            right -= 1
-
-        # Keep original unless a real frame exists on all four sides.
-        if (
-            top < min_border_px
-            or bottom > h - min_border_px
-            or left < min_border_px
-            or right > w - min_border_px
-        ):
+        frame_sides = sum(1 for n in (top, bottom, left, right) if n >= min_border_px)
+        if frame_sides < min_sides:
             return image
 
-        return rgb.crop((left, top, right, bottom))
+        return rgb.crop((left, top, w - right, h - bottom))
 
     @staticmethod
     def rotate_image(image: Image.Image, rotation: int) -> Image.Image:
