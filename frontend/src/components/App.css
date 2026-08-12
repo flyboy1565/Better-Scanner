@@ -80,6 +80,13 @@
   }
 }
 
+/* When the app is in mobile mode the sidebar is not rendered, so the grid must
+   not reserve its 350px track (a coarse-pointer tablet can exceed 1024px wide
+   in landscape and still be "mobile"). */
+.app-main-mobile .content-grid {
+  grid-template-columns: 1fr;
+}
+
 .control-sidebar {
   display: flex;
   flex-direction: column;
