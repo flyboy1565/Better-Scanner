@@ -8,9 +8,22 @@
   gap: 20px;
 }
 
-@media (max-width: 768px) {
+/* Tablet / mobile layout (matches the app's mobile breakpoint): 4 columns */
+@media (max-width: 1024px) {
   .gallery-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+}
+
+/* Phone: collapse to 2 columns */
+@media (max-width: 600px) {
+  .gallery-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  .image-gallery {
+    padding: 0;
   }
 }

@@ -42,6 +42,7 @@ class ImageProcessor:
                         cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
                         pil_img = Image.fromarray(cropped_rgb)
                         pil_img = pil_img.rotate(180, expand=True)
+                        pil_img = ImageProcessor.remove_polaroid_border(pil_img)
                         extracted_images.append(pil_img)
 
         return list(reversed(extracted_images))
@@ -58,6 +59,69 @@ class ImageProcessor:
         cropped = image.crop((real_x1, real_y1, real_x2, real_y2))
         cropped = cropped.rotate(180, expand=True)
         return cropped
+
+    @staticmethod
+    def remove_polaroid_border(
+        image: Image.Image,
+        border_tolerance: int = 18,
+        min_border_px: int = 10,
+    ) -> Image.Image:
+        """
+        Trim a uniform near-white (classic Polaroid) frame from a photo.
+
+        The frame is detected by sampling the corner color and walking inward
+        from each edge while the row/column mean stays close to that border
+        color. Only strips if ALL four sides have at least `min_border_px` of
+        uniform border (so ordinary borderless photos are not over-trimmed).
+        """
+        rgb = image.convert("RGB")
+        gray = cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2GRAY)
+        h, w = gray.shape
+
+        # Estimate the border color from the four corners.
+        corner = np.concatenate(
+            [
+                gray[:10, :10].ravel(),
+                gray[:10, -10:].ravel(),
+                gray[-10:, :10].ravel(),
+                gray[-10:, -10:].ravel(),
+            ]
+        )
+        border_val = float(np.median(corner))
+
+        # A classic Polaroid frame is near-white / cream.
+        if border_val < 200:
+            return image
+
+        row_mean = gray.mean(axis=1)
+        col_mean = gray.mean(axis=0)
+
+        top = 0
+        while top < h and abs(row_mean[top] - border_val) < border_tolerance:
+            top += 1
+
+        bottom = h
+        while bottom > top and abs(row_mean[bottom - 1] - border_val) < border_tolerance:
+            bottom -= 1
+
+        left = 0
+        while left < w and abs(col_mean[left] - border_val) < border_tolerance:
+            left += 1
+
+        right = w
+        while right > left and abs(col_mean[right - 1] - border_val) < border_tolerance:
+            right -= 1
+
+        # Keep original unless a real frame exists on all four sides.
+        if (
+            top < min_border_px
+            or bottom > h - min_border_px
+            or left < min_border_px
+            or right > w - min_border_px
+        ):
+            return image
+
+        return rgb.crop((left, top, right, bottom))
 
     @staticmethod
     def rotate_image(image: Image.Image, rotation: int) -> Image.Image:
