@@ -140,7 +140,7 @@ Add to `.env`:
 # Single scanner:
 SCANNER_IP=192.168.68.61
 # Or multiple scanners (space-separated):
-SCANNER_IPS=192.168.68.61 192.168.68.64
+SCANNER_IPS=192.168.68.61 192.168.68.63
 ```
 
 The `docker-start.sh` writes them to `/etc/sane.d/airscan.conf` as `https://$IP/eSCL` entries.
@@ -159,7 +159,7 @@ Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 sha
 - **`backend/docker-start.sh`** — New entrypoint script that starts dbus + avahi, configures `airscan.conf` from `SCANNER_IP`/`SCANNER_IPS` env vars (URL format: `https://$IP/eSCL`)
 - **`docker-compose.yml`** — Added `SCANNER_IP`/`SCANNER_IPS` env vars, reverted port mapping (host networking broke WSL2 port forwarding)
 - **`backend/requirements.txt`** — Bumped `pydantic==2.5.0` → `2.7.0` to fix dependency conflict
-- **`.env`** — Added `SCANNER_IPS=192.168.68.61 192.168.68.64` for local EPSON scanners
+- **`.env`** — Added `SCANNER_IPS=192.168.68.61 192.168.68.63` for local EPSON scanners
 - **`AGENTS.md`** — Updated with nmap discovery instructions and scanner details
 
 ## Other findings (not yet addressed)
@@ -174,9 +174,10 @@ Then restart WSL: `wsl --shutdown` and reopen your terminal. This makes WSL2 sha
 - eSCL scanning endpoint: `https://192.168.68.61/eSCL/ScannerCapabilities`
 - S/N: `58384B4A3333343951`
 
-### EPSON WF-4720 Series (`192.168.68.64`)
-- eSCL scanning endpoint: `https://192.168.68.64/eSCL/ScannerCapabilities`
+### EPSON WF-4720 Series (`192.168.68.63`)
+- eSCL scanning endpoint: `https://192.168.68.63/eSCL/ScannerCapabilities`
 - S/N: `583254533139383117`
+- NOTE: DHCP lease is NOT static — was `.64` until an Aug 2026 reboot reassigned it to `.63`. If it moves again, re-run the nmap/port-443 sweep to find it and update `SCANNER_IPS`.
 
 ### Both scanners
 - Both use HTTPS on port 443 for eSCL (not port 9095)
