@@ -147,7 +147,7 @@ class ImmichClient:
             # Modern Immich uses PUT on /api/albums/{id}/assets to update album contents
             response = requests.put(
                 f"{self.server_url.rstrip('/')}/api/albums/{album_id}/assets",
-                json={"assetIds": [asset_id]},
+                json={"ids": [asset_id]},
                 headers=self._get_headers(),
                 timeout=30,
             )

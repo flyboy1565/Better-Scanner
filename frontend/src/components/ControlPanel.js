@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useScanStore } from '../store/scanStore';
+import scannerApi from '../services/scannerApi';
 import './ControlPanel.css';
 
 function ControlPanel({ serverStatus, immichStatus, saveMode, showActions = true }) {
@@ -28,6 +29,8 @@ function ControlPanel({ serverStatus, immichStatus, saveMode, showActions = true
     setSuccess,
   } = useScanStore();
 
+  const [scannerWarning, setScannerWarning] = useState(null);
+
   useEffect(() => {
     if (serverStatus === 'healthy') {
       fetchDevices();
@@ -35,6 +38,9 @@ function ControlPanel({ serverStatus, immichStatus, saveMode, showActions = true
         setAlbums([]);
         fetchAlbums();
       }
+      scannerApi.getScannerStatus().then((data) => {
+        setScannerWarning(data.warning || null);
+      }).catch(() => {});
     }
   }, [serverStatus, immichStatus?.enabled]);
 
@@ -43,6 +49,12 @@ function ControlPanel({ serverStatus, immichStatus, saveMode, showActions = true
       <div className="card-header">
         <h2>Control Panel</h2>
       </div>
+
+      {scannerWarning && (
+        <div className="status status-warning" style={{ marginBottom: '12px' }}>
+          ⚠️ {scannerWarning}
+        </div>
+      )}
 
       <div className="control-section">
         <label className="control-label">Scanner Device</label>

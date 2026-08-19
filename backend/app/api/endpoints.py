@@ -67,6 +67,36 @@ def get_scanner_devices():
     return {"devices": devices}
 
 
+@router.get("/scanner/status")
+def get_scanner_status():
+    """Check scanner health: compare configured IPs vs live-discovered IPs."""
+    devices = ScannerService.get_available_devices()
+    configured_ips = ScannerService.get_configured_ips()
+    live = []
+    mismatches = []
+
+    for dev in devices:
+        entry = {"name": dev["name"], "uri": dev["uri"], "discovered_ip": dev.get("ip", "")}
+        configured_ip = configured_ips.get(dev["name"], "")
+        entry["configured_ip"] = configured_ip
+        if configured_ip and dev.get("ip") and configured_ip != dev["ip"]:
+            entry["status"] = "ip_changed"
+            mismatches.append(entry)
+        else:
+            entry["status"] = "ok"
+        live.append(entry)
+
+    return {
+        "scanners": live,
+        "mismatch": len(mismatches) > 0,
+        "warning": (
+            f"Scanner IP(s) changed: {', '.join(m['name'] for m in mismatches)}. "
+            "DHCP lease may have shifted. Scans still work via mDNS, but consider "
+            "updating SCANNER_IPS or setting DHCP reservations."
+        ) if mismatches else None,
+    }
+
+
 @router.post("/scan", response_model=ScanResponse)
 async def scan_document(request: ScanRequest):
     """Trigger a document scan"""
@@ -255,6 +285,31 @@ async def apply_photo(photo_id: int, request: PhotoApplyRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Apply failed: {str(e)}")
+
+
+@router.post("/photo/{photo_id}/insert-after")
+async def insert_photo_after(photo_id: int, request: PhotoApplyRequest):
+    """Insert a new image (base64) right after the given photo in the session."""
+    if photo_id >= len(current_session["photos"]):
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    try:
+        img = base64_to_image(request.image_base64)
+        insert_pos = photo_id + 1
+        current_session["photos"].insert(insert_pos, img)
+
+        return {
+            "success": True,
+            "photo": {
+                "id": insert_pos,
+                "width": img.width,
+                "height": img.height,
+                "image_base64": request.image_base64,
+            },
+            "total": len(current_session["photos"]),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Insert failed: {str(e)}")
 
 
 @router.delete("/photo/{photo_id}")

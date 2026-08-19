@@ -54,6 +54,12 @@ export const useScanStore = create(
     photos: state.photos.filter((_, i) => i !== index),
   })),
 
+  insertPhoto: (index, photo) => set((state) => {
+    const newPhotos = [...state.photos];
+    newPhotos.splice(index + 1, 0, photo);
+    return { photos: newPhotos };
+  }),
+
   setFullRawScan: (scan) => set({ fullRawScan: scan }),
   setScanInProgress: (inProgress) => set({ scanInProgress: inProgress }),
   setScanStatusMessage: (msg) => set({ scanStatusMessage: msg }),

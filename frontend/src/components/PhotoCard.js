@@ -41,7 +41,7 @@ function LightboxModal({ isOpen, onClose, imgSrc, altText }) {
 }
 
 // Modal showing original vs fixed version (choose one to keep)
-function FixModal({ isOpen, onClose, beforeSrc, afterSrc, onKeepOriginal, onKeepFixed, working }) {
+function FixModal({ isOpen, onClose, beforeSrc, afterSrc, onKeepOriginal, onKeepBoth, onKeepFixed, working }) {
   if (!isOpen) return null;
   return (
     <div className="modal-overlay" onClick={!working ? onClose : undefined}>
@@ -69,6 +69,15 @@ function FixModal({ isOpen, onClose, beforeSrc, afterSrc, onKeepOriginal, onKeep
             >
               Keep Original
             </button>
+            {onKeepBoth && (
+              <button
+                className="btn-sm btn-secondary"
+                onClick={onKeepBoth}
+                disabled={working}
+              >
+                {working ? 'Applying...' : 'Keep Both'}
+              </button>
+            )}
             <button
               className="btn-sm btn-fix modal"
               onClick={onKeepFixed}
@@ -84,7 +93,7 @@ function FixModal({ isOpen, onClose, beforeSrc, afterSrc, onKeepOriginal, onKeep
 }
 
 function PhotoCard({ photo, index }) {
-  const { updatePhoto, deletePhoto } = useScanStore();
+  const { updatePhoto, deletePhoto, insertPhoto } = useScanStore();
 
   // Modal Visibility States
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -158,6 +167,29 @@ function PhotoCard({ photo, index }) {
       setFixAfterSrc(null);
     } catch (err) {
       setError('Apply failed');
+      console.error(err);
+    } finally {
+      setFixWorking(false);
+    }
+  };
+
+  const handleKeepBoth = async () => {
+    if (!fixAfterSrc) return;
+    setFixWorking(true);
+    setError(null);
+    try {
+      await scannerApi.insertPhotoAfter(index, fixAfterSrc);
+      insertPhoto(index, {
+        id: index + 1,
+        base64: fixAfterSrc,
+        width: photo.width,
+        height: photo.height,
+      });
+      setIsFixOpen(false);
+      setFixBeforeSrc(null);
+      setFixAfterSrc(null);
+    } catch (err) {
+      setError('Insert failed');
       console.error(err);
     } finally {
       setFixWorking(false);
@@ -260,6 +292,7 @@ function PhotoCard({ photo, index }) {
         beforeSrc={fixBeforeSrc ? `data:image/png;base64,${fixBeforeSrc}` : ''}
         afterSrc={fixAfterSrc ? `data:image/png;base64,${fixAfterSrc}` : ''}
         onKeepOriginal={handleKeepOriginal}
+        onKeepBoth={handleKeepBoth}
         onKeepFixed={handleKeepFixed}
         working={fixWorking}
       />

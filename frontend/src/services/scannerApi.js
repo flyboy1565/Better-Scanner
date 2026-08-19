@@ -63,6 +63,14 @@ export const scannerApi = {
     return response.data;
   },
 
+  // Insert a new image (base64) right after photoId in the session (Keep Both)
+  insertPhotoAfter: async (photoId, imageBase64) => {
+    const response = await api.post(`/api/photo/${photoId}/insert-after`, {
+      image_base64: imageBase64,
+    });
+    return response.data;
+  },
+
   // Delete a photo
   deletePhoto: async (photoId) => {
     const response = await api.delete(`/api/photo/${photoId}`);
@@ -94,6 +102,12 @@ export const scannerApi = {
   // Check Immich server health
   checkImmichHealth: async () => {
     const response = await api.get('/api/immich/health');
+    return response.data;
+  },
+
+  // Get scanner status (IP drift detection)
+  getScannerStatus: async () => {
+    const response = await api.get('/api/scanner/status');
     return response.data;
   },
 

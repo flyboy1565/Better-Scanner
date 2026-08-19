@@ -72,6 +72,19 @@ class ScannerService:
         return ScannerService.discover_devices()
 
     @staticmethod
+    def get_configured_ips() -> dict[str, str]:
+        """Return mapping of scanner name → configured IP from SCANNER_IPS/SCANNER_NAMES env."""
+        names_str = getattr(settings, "SCANNER_NAMES", "") or ""
+        ips_str = getattr(settings, "SCANNER_IPS", "") or ""
+        names = names_str.split() if names_str else []
+        ips = ips_str.split() if ips_str else []
+        result = {}
+        for i, ip in enumerate(ips):
+            name = names[i] if i < len(names) else f"Network Scanner {i + 1}"
+            result[name] = ip
+        return result
+
+    @staticmethod
     def _extract_ip_from_uri(device_uri: str) -> Optional[str]:
         """Extract IP address from a scanner device URI."""
         ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', device_uri)
