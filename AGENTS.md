@@ -48,6 +48,7 @@
 - The frontend `package-lock.json` had `typescript@6.0.3` but `npm ci` required `4.9.5` — fixed by `npm install` with the pinned version and (importantly) ran `npm ci && npm run build` once inside `node:20-alpine` on the server to regenerate it with the exact npm version CI uses (local npm 11 vs container npm 10 disagree otherwise).
 - Smoke test running immediately after `up -d` can hit a not-yet-served backend → add readiness retry loop.
 - GitHub Actions secrets: only set through **repo Settings → Secrets → Actions** (`IMMICH_API_KEY`); a failed run does NOT re-run automatically when the secret is added later — click "Re-run failed jobs" or push a trivial commit.
+- **`docker compose up -d` does NOT detect bind-mount file content changes** — it only watches the compose YAML definition. When a bind-mounted file like `nginx.conf` changes on disk, the container keeps serving the old version from memory. Workaround: after CI deploys, run `docker compose -f docker-compose.server.yml up -d --force-recreate --no-deps nginx` (needs `IMMICH_API_KEY` env set). Consider adding this as a CI step if nginx.conf changes are frequent.
 
 ### Branch
 `server-deployment`
@@ -71,9 +72,31 @@
 7. **`frontend/src/components/App.js`** — Reads `save_mode` from `/config`, passes to ControlPanel
 8. **`frontend/src/components/ControlPanel.js`** — Hides work mode selector on server, hides export format in `immich_only` mode, updates status messages
 
-### D. Other Cleanup
+#### D. Other Cleanup
 
 9. **`docker-compose.yml`** — Removed orphaned `volumes: scans:` block (was lines 36-37)
+
+#### F. Immich Album Bug Fix (commit `dd165da`)
+
+10. **`backend/app/services/immich_client.py:150`** — Fixed `"assetIds"` → `"ids"` (Immich PUT `/api/albums/{id}/assets` expects field name `ids`, not `assetIds` — this was silently failing album additions)
+
+#### G. Keep Both Feature (commit `dd165da`)
+
+11. **`backend/app/api/endpoints.py`** — New `POST /api/photo/{photo_id}/insert-after` endpoint: accepts base64 image, inserts it into the session array right after the given photo index
+12. **`frontend/src/services/scannerApi.js`** — New `insertPhotoAfter(photoId, imageBase64)` function
+13. **`frontend/src/store/scanStore.js`** — New `insertPhoto(index, photo)` action using `splice(index + 1, 0, photo)`
+14. **`frontend/src/components/PhotoCard.js`** — "Keep Both" button in FixModal; calls `insertPhotoAfter` then `insertPhoto` to keep both original and fixed versions
+
+#### H. Scanner IP Drift Detection (commit `dd165da`)
+
+15. **`backend/app/api/endpoints.py`** — New `GET /api/scanner/status` endpoint: compares configured IPs (from `SCANNER_IPS` env) against live SANE-discovered IPs, returns mismatch warnings
+16. **`backend/app/services/scanner.py`** — New `get_configured_ips()` method: parses `SCANNER_IPS` and `SCANNER_NAMES` env vars into a `{name: ip}` dict
+17. **`frontend/src/services/scannerApi.js`** — New `getScannerStatus()` function
+18. **`frontend/src/components/ControlPanel.js`** — Fetches scanner status on mount, shows warning banner when IP mismatch detected
+
+#### I. Nginx Body Size Fix (commit `cdfd2fc`)
+
+19. **`nginx.conf`** — Added `client_max_body_size 50m` (nginx defaults to 1MB, which blocks base64-encoded photo uploads like Keep Both and Apply)
 
 #### E. Docker Networking + Scanner Discovery
 
@@ -102,8 +125,10 @@
   - `"local"` — Save to disk only (TARGET_DIR)
   - `"immich_only"` — Upload to Immich only, no local copy
   - `"both"` — Save to disk AND upload to Immich
-- When `SAVE_MODE=immich_only`, manual crop is hidden from UI, export format selector is hidden, history thumbnails still work (generated from in-memory images)
+- When `SAVE_MODE=immich_only`, manual crop is hidden from UI, export format selector is hidden, history thumbnails still work (generated from from-memory images)
 - nginx serves frontend static files at `/` and proxies `/api/`, `/health`, `/config` to backend
+- **nginx `client_max_body_size` must be ≥50m** — base64-encoded photo uploads (Apply, Keep Both) easily exceed the 1MB default
+- **Docker bridge networking blocks mDNS** — even on a real Linux host (not just WSL2), mDNS multicast cannot cross Docker's bridge network. Static `SCANNER_IPS` in compose is required for airscan to find scanners.
 - The `photoSaves` checkbox (Include in Save) is still UI-only — not yet wired to filter `photo_ids`
 
 ## Docker Compose save path (for local development)
@@ -116,7 +141,7 @@ SAVE_PATH=/mnt/c/Users/flybo/OneDrive/Pictures/Scanner Images ( Nana&Mom )
 
 ## WSL2 + Docker (Scanner Discovery)
 
-WiFi scanners use mDNS (multicast DNS) for discovery. On WSL2, Docker containers run inside the WSL2 VM, which is behind a NAT — mDNS packets can't reach the Windows host's LAN.
+WiFi scanners use mDNS (multicast DNS) for discovery. On WSL2, Docker containers run inside the WSL2 VM, which is behind a NAT — mDNS packets can't reach the Windows host's LAN. **This also applies to real Linux hosts** — Docker bridge networking isolates containers from the LAN's multicast domain, so mDNS discovery fails even on holfam.
 
 **Two options to fix scanner access:**
 
