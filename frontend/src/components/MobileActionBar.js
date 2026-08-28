@@ -6,8 +6,7 @@ function MobileActionBar({ serverStatus }) {
   const {
     photos,
     loading,
-    handleScan,
-    handleSavePhotos,
+    handleSaveAndScan,
     clearSession,
   } = useScanStore();
 
@@ -17,17 +16,10 @@ function MobileActionBar({ serverStatus }) {
     <div className="mobile-action-bar">
       <button
         className="btn-primary action-btn"
-        onClick={handleScan}
+        onClick={handleSaveAndScan}
         disabled={!canScan || loading}
       >
-        {loading ? '⏳...' : '🚀 Scan'}
-      </button>
-      <button
-        className="btn-success action-btn"
-        onClick={handleSavePhotos}
-        disabled={photos.length === 0 || loading}
-      >
-        💾 Save
+        {loading ? '⏳...' : photos.length > 0 ? '💾 Save & Scan' : '🚀 Scan'}
       </button>
       <button
         className="btn-secondary action-btn"

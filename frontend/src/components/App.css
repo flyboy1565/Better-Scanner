@@ -173,6 +173,12 @@
   line-height: 1;
 }
 
+/* Header nav scan button */
+.nav-scan-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
 /* Mobile main content needs bottom padding for the fixed action bar */
 .app-main-mobile {
   padding-bottom: 90px;

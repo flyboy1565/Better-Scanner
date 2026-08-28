@@ -112,7 +112,7 @@ export const useScanStore = create(
     const state = get();
     if (!state.selectedDevice) {
       set({ error: 'Please select a scanner device' });
-      return;
+      return false;
     }
 
     set({ loading: true, error: null, scanInProgress: true });
@@ -148,6 +148,7 @@ export const useScanStore = create(
         set({ success: 'Scan completed! Ready for manual cropping.' });
         set({ photos: [] });
       }
+      return true;
     } catch (err) {
       const detail = err.response?.data?.detail || err.message || 'Failed to scan';
       if (detail.startsWith('CONNECTION_ISSUE:')) {
@@ -158,6 +159,7 @@ export const useScanStore = create(
         set({ error: detail });
       }
       console.error(err);
+      return false;
     } finally {
       set({ loading: false, scanInProgress: false });
       set({ scanStatusMessage: '' });
@@ -168,7 +170,7 @@ export const useScanStore = create(
     const state = get();
     if (state.photos.length === 0) {
       set({ error: 'No photos to save' });
-      return;
+      return false;
     }
 
     set({ loading: true, error: null });
@@ -190,21 +192,28 @@ export const useScanStore = create(
         if (historyData.photos) {
           set({ historyPhotos: historyData.photos });
         }
+        return true;
       } else {
         set({ error: response.error || 'Failed to save photos' });
+        return false;
       }
     } catch (err) {
       set({ error: err.message || 'Failed to save photos' });
       console.error(err);
+      return false;
     } finally {
       set({ loading: false });
     }
   },
 
-  clearSession: () => set({
-    photos: [],
-    fullRawScan: null,
-  }),
+  handleSaveAndScan: async () => {
+    const state = get();
+    if (state.photos.length > 0) {
+      const saveResult = await get().handleSavePhotos();
+      if (!saveResult) return false;
+    }
+    return await get().handleScan();
+  },
 }),
 {
   name: 'better-scanner-storage',
