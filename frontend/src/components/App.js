@@ -24,6 +24,8 @@ function App() {
     setImmichEnabled,
     fetchDevices,
     fetchAlbums,
+    handleScan,
+    loading,
   } = useScanStore();
 
   const isMobile = useMobile();
@@ -103,6 +105,15 @@ function App() {
             )}
           </div>
           <div className="flex items-center gap-4">
+            {isMobile && (
+              <button
+                className="btn-primary nav-scan-btn"
+                onClick={handleScan}
+                disabled={loading || serverStatus !== 'healthy'}
+              >
+                {loading ? '⏳' : '🚀 Scan'}
+              </button>
+            )}
             {isMobile && (
               <button
                 className="btn-secondary settings-btn"
