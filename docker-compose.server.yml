@@ -13,7 +13,7 @@ services:
       - RAW_SCAN_PATH=/app/raw_scan_temp.jpg
       - SCAN_RESOLUTION=600
       - SAVE_MODE=immich_only
-      - SCANNER_IPS=192.168.68.63 192.168.68.61
+      - SCANNER_IPS=192.168.68.70 192.168.68.61
       - SCANNER_NAMES=WF-4720 ET-2800
       - IMMICH_SERVER_URL=http://immich_server:2283
       - IMMICH_ENABLED=True
